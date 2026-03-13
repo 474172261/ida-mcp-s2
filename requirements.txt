@@ -1,0 +1,12 @@
+# IDA MCP Server Requirements
+
+# Core dependencies
+# Note: idalib is provided by IDA Pro installation and not available via pip
+mcp>=1.6.0
+uvicorn>=0.24.0
+starlette>=0.27.0
+
+# Optional dependencies for enhanced functionality
+# Uncomment if needed
+# capstone>=4.0.2  # Alternative disassembly engine
+# networkx>=2.8    # For call graph analysis

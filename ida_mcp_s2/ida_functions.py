@@ -381,7 +381,7 @@ def callees(addrs: Union[str, List[str]]) -> List[Dict]:
                         if idaapi.get_func(target) is not None
                         else "external"
                     )
-                    func_name = idc.get_name(target)
+                    func_name = get_readble_name(target)
                     if func_name is not None:
                         callees.append(
                             {
