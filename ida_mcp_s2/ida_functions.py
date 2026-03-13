@@ -1,0 +1,1067 @@
+"""
+IDA功能实现
+使用函数式编程范式
+"""
+import ida_idaapi
+import idautils
+from typing import List, Dict, Any, Optional, Union
+import json
+import ida_funcs
+import ida_name
+import idc
+import ida_nalt
+import ida_hexrays
+import ida_xref
+import idaapi
+import struct
+import ida_bytes
+import ida_frame
+import re
+import ida_typeinf
+
+
+global_func_lists = []
+global_Nams_lists = []
+global_imports_lists = []
+# global_strings_lists = []
+
+def debug_stop():
+    import pdb
+    pdb.set_trace()
+
+def get_readble_name(func_ea):
+    name = idc.get_name(func_ea)
+    if not name:
+        func_name = idc.get_func_name(func_ea)
+        if not func_name:
+            clean_name = hex(func_ea)
+            return clean_name
+        name = func_name
+    clean_name = ida_name.demangle_name(name, 8)
+    if clean_name == None:
+        clean_name = name
+    return clean_name
+
+def list_funcs(
+    offset: int = 0,
+    limit: int = 10,
+    contain = '*',
+) -> List[Dict]:
+    """列出函数 - 函数式实现"""
+    global global_func_lists
+    results = []
+    func_count = 0
+    if len(global_func_lists) == 0:
+        raise ValueError("not init yet")
+
+    for clean_name,func_ea,func in global_func_lists:
+        if not func:
+            continue
+
+        # Apply contain
+        if (contain != '*') and contain.lower() not in clean_name.lower():
+            continue
+
+        func_count += 1
+        # Apply pagination
+        if func_count <= offset:
+            continue
+        if len(results) >= limit:
+            break
+        results.append(
+            {"address": hex(func_ea), "name": clean_name, "size": func.size()}
+        )
+
+    return results
+
+
+def list_globals(
+    offset: int = 0,
+    limit: int = 10,
+    contain: Optional[str] = None,
+) -> List[Dict]:
+    """列出全局变量 - 函数式实现"""
+    global global_Nams_lists
+    results = []
+    global_count = 0
+
+    if len(global_Nams_lists) == 0:
+        raise ValueError("not init yet")
+    for ea, name in global_Nams_lists:
+            # Apply filter
+            if (contain != '*') and contain.lower() not in name.lower():
+                continue
+
+            global_count += 1
+
+            # Apply pagination
+            if global_count <= offset:
+                continue
+            results.append({"address": hex(ea), "name": name})
+            if len(results) >= limit:
+                break
+    return results
+
+
+def list_imports(offset: int = 0, limit: int = 10, contain: Optional[str] = "*") -> List[Dict]:
+    """列出导入符号 - 函数式实现"""
+    global global_imports_lists
+
+    results = []
+    if len(global_imports_lists) == 0:
+        raise ValueError("not init yet")
+
+    total_count = 0
+    for ea, name, module_name in global_imports_lists:
+        if offset > total_count:
+            continue
+        
+        if (contain != '*') and contain.lower() not in name.lower():
+                continue
+        
+        results.append(
+            {
+                "address": hex(ea),
+                "name": name,
+                "module": module_name,
+            }
+        )
+        total_count += 1
+
+        if len(results) >= limit:
+            break
+    return results
+
+def lookup_funcs(queries: List[str]) -> List[Dict]:
+    """查找函数 - 函数式实现"""
+    global global_func_lists
+
+    results = []
+    for query in queries:
+        # Try to parse as address
+        try:
+            addr = int(query, 0)
+            func = ida_funcs.get_func(addr)
+            if func:
+                func_name = get_readble_name(func.start_ea)
+                results.append(
+                    {
+                        "address": hex(func.start_ea),
+                        "name": func_name,
+                        "size": func.size(),
+                    }
+                )
+            else:
+                raise ValueError(f"error: {query} not a function.")
+        except ValueError:
+            found = False
+            for clean_name, func_ea, func in global_func_lists:                                             
+                if query == clean_name:                                                                       
+                    results.append(                                                                         
+                        {                                                                                   
+                            "address": hex(func.start_ea),                                                  
+                            "name": query,                                                                  
+                            "size": func.size(),                                                            
+                        }                                                                                   
+                    )                                                                                       
+                    found = True                                                                            
+                    break   
+            if not found:                                                                        
+                try:                                                                                            
+                    regex_obj = re.compile(query, re.IGNORECASE)                                                
+                    for clean_name, func_ea, func in global_func_lists:                                         
+                        if regex_obj.search(clean_name):                                                        
+                            results.append(                                                                     
+                                {                                                                               
+                                    "address": hex(func_ea),                                                    
+                                    "name": clean_name,                                                         
+                                    "size": func.size(),                                                        
+                                }                                                                               
+                            )                                                                                   
+                            found = True                                                                          
+                except re.error:                                                                                
+                    raise ValueError("string contain regex, but regex wrong")                                                                                          
+                                                                                                                
+            if not found:                                                                                       
+                raise ValueError(f"function {query} can't find") 
+
+    return results
+
+
+def decompile(addr_or_name: str) -> str:
+    """反编译函数 - 函数式实现"""
+
+    # Parse address
+    this_func = None
+    if isinstance(addr_or_name, str):
+        try:
+            addr = int(addr_or_name, 0)
+            this_func = ida_funcs.get_func(addr)
+            if not this_func:
+                raise ValueError(f"No function at address {addr_or_name}")
+        except:
+            for clean_name,func_ea,func in global_func_lists:
+                if clean_name == addr_or_name:
+                    this_func = func
+                    break
+    if not this_func:
+        raise ValueError(f"No function of {addr_or_name}")
+
+    cfunc = ida_hexrays.decompile(this_func)
+    if not cfunc:
+        raise ValueError(f"Failed to decompile function at {addr_or_name}")
+
+    return str(cfunc)
+
+
+def disasm(addr_or_name: str) -> str:
+    """反汇编函数 - 获取函数的汇编代码或指定地址起的8条指令"""
+    
+    this_func = None
+    addr = None
+
+    # 1. 尝试解析地址或函数名
+    if isinstance(addr_or_name, str):
+        try:
+            addr = int(addr_or_name, 0)
+            this_func = ida_funcs.get_func(addr)
+        except ValueError:
+            # 如果不是数字，尝试从全局列表匹配
+            for clean_name, func_ea, func in global_func_lists:
+                if clean_name == addr_or_name:
+                    this_func = func
+                    addr = func.start_ea
+                    break
+
+    results = []
+
+    # 情况 A: 找到了函数，反汇编整个函数
+    if this_func:
+        curr_addr = this_func.start_ea
+        end_addr = this_func.end_ea
+        
+        while curr_addr < end_addr:
+            insn = idaapi.insn_t()
+            insn_len = idaapi.decode_insn(insn, curr_addr)
+            if insn_len <= 0: break
+            
+            disasm_text = idc.generate_disasm_line(curr_addr, 0)
+            results.append(f'{hex(curr_addr)}: {disasm_text}\n')
+            curr_addr += insn_len
+
+    # 情况 B: 未找到函数，但有有效地址，反汇编接下来的 8 条指令
+    elif addr is not None:
+        curr_addr = addr
+        for _ in range(8):
+            insn = idaapi.insn_t()
+            insn_len = idaapi.decode_insn(insn, curr_addr)
+            
+            # 如果无法解析指令（比如到了段末尾或非法数据）
+            if insn_len <= 0:
+                break
+                
+            disasm_text = idc.generate_disasm_line(curr_addr, 0)
+            if not disasm_text:
+                disasm_text = "db " + " ".join(
+                    f"{b:02X}" for b in idaapi.get_bytes(curr_addr, insn_len)
+                )
+            results.append(f'{hex(curr_addr)}: {disasm_text}\n')
+            curr_addr += insn_len
+    else:
+        raise ValueError(f"Could not resolve address or function: {addr_or_name}")
+
+    return ''.join(results)
+
+
+def xrefs_to(addrs: Union[str, List[str]]) -> List[Dict]:
+    """获取交叉引用 - 函数式实现"""
+
+    if isinstance(addrs, str):
+        addrs = [addrs]
+
+    results = []
+
+    for addr_str in addrs:
+        addr = int(addr_str, 0)
+
+        for xref in idautils.XrefsTo(addr):
+            
+            from_name = get_readble_name(xref.frm)
+            to_name = get_readble_name(xref.to)
+
+            results.append(
+                {
+                    "from": hex(xref.frm),
+                    "from_name": from_name,
+                    "to_name": to_name,
+                    "type": "code" if xref.iscode else "data",
+                }
+            )
+
+    return results
+
+
+def xrefs_to_field(queries: List[Dict]) -> List[Dict]:
+    """获取结构体字段交叉引用 - 函数式实现"""
+
+    results = []
+
+    for query in queries:
+        struct_name = query.get("struct")
+        field_name = query.get("field")
+
+        # Find struct
+        struct_id = idc.get_struc_id(struct_name)
+        if struct_id == ida_idaapi.BADADDR:
+            results.append(
+                {
+                    "struct": struct_name,
+                    "field": field_name,
+                    "info": "struct not exist"
+                }
+            )
+            continue
+        offset = idc.get_member_offset(struct_id, field_name)
+        mid = idc.get_member_id(struct_id, offset)
+        if not mid:
+            results.append(
+                {
+                    "struct": struct_name,
+                    "field": field_name,
+                    "info": "field not exist"
+                }
+            )
+            continue
+        refs = []
+        for xref in idautils.XrefsTo(mid):
+            ref_name = get_readble_name(xref.frm)
+            refs.append((hex(xref.frm), 'inside '+ref_name))
+        results.append(
+            {
+                "struct": struct_name,
+                "field": field_name,
+                "offset": hex(offset),
+                "xrefs": refs,  # Would be populated with actual xrefs
+            }
+        )
+
+    return results
+
+
+def callees(addrs: Union[str, List[str]]) -> List[Dict]:
+    """获取被调用函数 - 函数式实现"""
+
+    if isinstance(addrs, str):
+        addrs = [addrs]
+
+    results = []
+
+    for addr_str in addrs:
+        addr = int(addr_str, 0)
+        func = ida_funcs.get_func(addr)
+
+        if not func:
+            continue
+
+        callees_list = []
+
+        # Iterate through function code
+        curr_addr = func.start_ea
+        func_end = idc.find_func_end(curr_addr)
+        callees: list[dict[str, str]] = []
+        while curr_addr < func_end:
+            insn = idaapi.insn_t()
+            idaapi.decode_insn(insn, curr_addr)
+            if insn.itype in [idaapi.NN_call, idaapi.NN_callfi, idaapi.NN_callni]:
+                target = idc.get_operand_value(curr_addr, 0)
+                target_type = idc.get_operand_type(curr_addr, 0)
+                if target_type in [idaapi.o_mem, idaapi.o_near, idaapi.o_far]:
+                    func_type = (
+                        "internal"
+                        if idaapi.get_func(target) is not None
+                        else "external"
+                    )
+                    func_name = idc.get_name(target)
+                    if func_name is not None:
+                        callees.append(
+                            {
+                                "addr": hex(target),
+                                "name": func_name,
+                                "type": func_type,
+                            }
+                        )
+            curr_addr = idc.next_head(curr_addr, func_end)
+
+        unique_callee_tuples = {tuple(callee.items()) for callee in callees}
+        unique_callees = [dict(callee) for callee in unique_callee_tuples]
+        results.append(unique_callees)
+    return results
+
+
+def get_bytes(addrs: Union[str, List[str]]) -> List[Dict]:
+    """读取字节 - 函数式实现"""
+
+    if isinstance(addrs, str):
+        addrs = [addrs]
+
+    results = []
+
+    for addr_str in addrs:
+        addr = int(addr_str, 0)
+        size = 16  # Default read size
+
+        data = idaapi.get_bytes(addr, size)
+        if data:
+            results.append(
+                {
+                    "address": hex(addr),
+                    "bytes": data.hex(),
+                    "ascii": "".join(chr(b) if 32 <= b < 127 else "." for b in data),
+                }
+            )
+
+    return results
+
+
+def get_int(queries: List[Dict]) -> List[Dict]:
+    """读取整数 - 函数式实现"""
+
+    type_map = {
+        "i8": ("b", 1),
+        "u8": ("B", 1),
+        "i16le": ("<h", 2),
+        "u16le": ("<H", 2),
+        "i16be": (">h", 2),
+        "u16be": (">H", 2),
+        "i32le": ("<i", 4),
+        "u32le": ("<I", 4),
+        "i32be": (">i", 4),
+        "u32be": (">I", 4),
+        "i64le": ("<q", 8),
+        "u64le": ("<Q", 8),
+        "i64be": (">q", 8),
+        "u64be": (">Q", 8),
+    }
+
+    results = []
+
+    for query in queries:
+        addr = int(query.get("addr"), 0)
+        dtype = query.get("type", "u32le")
+
+        if dtype not in type_map:
+            continue
+
+        fmt, size = type_map[dtype]
+        data = idaapi.get_bytes(addr, size)
+
+        if data:
+            value = struct.unpack(fmt, data)[0]
+            results.append({"address": hex(addr), "type": dtype, "value": value})
+
+    return results
+
+
+def read_string(addrs: Union[str, List[str]]) -> List[Dict]:
+    """读取字符串 - 函数式实现"""
+
+    if isinstance(addrs, str):
+        addrs = [addrs]
+
+    results = []
+
+    for addr_str in addrs:
+        addr = int(addr_str, 0)
+        string = ida_bytes.get_strlit_contents(addr, -1, 0)
+
+        if string:
+            results.append(
+                {
+                    "address": hex(addr),
+                    "string": string.decode("utf-8", errors="replace"),
+                    "length": len(string),
+                }
+            )
+
+    return results
+
+def search_in_strings_window(pattern: str) -> List[Dict]:
+    """
+    在 IDA 的字符串列表中进行子串匹配
+    """
+    s = idautils.Strings()
+    results = []
+    for string_item in s:
+        # 获取字符串内容
+        content = str(string_item)
+        if pattern in content:
+            results.append({'ea':string_item.ea, 'text':content})
+            
+    return results
+
+def get_global_value(queries: Union[str, List[str]]) -> List[Dict]:
+    """获取全局变量值 - 函数式实现"""
+
+    if isinstance(queries, str):
+        queries = [q.strip() for q in queries.split(",")]
+
+    results = []
+    global global_Nams_lists
+    for query in queries:
+        # Try as address
+        try:
+            addr = int(query, 0)
+        except ValueError:
+            # Try as name
+            found = False
+            for each in global_Nams_lists:
+                if each[1] == query:
+                    addr = each[0]
+                    found = True
+            if not found:
+                raise ValueError(f"Can't read data at {query}, not a global Name")
+
+        # Read value (assume 4-byte for now)
+        try:
+            value = ida_bytes.get_dword(addr)
+        except Exception as e:
+            raise ValueError(f"Can't read data at {query}. Error:{e}")
+
+        results.append(
+            {"name_or_addr": query, "address": hex(addr), "value": hex(value)}
+        )
+
+    return results
+
+
+def stack_frame(addrs: Union[str, List[str]]) -> List[Dict]:
+    if isinstance(addrs, str):
+        addrs = [addrs]
+
+    results = []
+    for addr_str in addrs:
+        addr = int(addr_str, 0)
+        # 获取栈帧 ID
+        frame_id = idc.get_frame_id(addr)
+        if frame_id == idc.BADADDR:
+            continue
+            
+        members = []
+        # 使用 idautils 直接获取成员信息 (offset, name, size)
+        for offset, name, size in idautils.StructMembers(frame_id):
+            members.append({
+                "offset": hex(offset),
+                "name": name,
+                "size": size
+            })
+            
+        results.append({
+            "function": hex(addr),
+            "frame_size": idc.get_struc_size(frame_id),
+            "variables": members
+        })
+    return results
+
+def declare_stack_variable(items: List[Dict]) -> List[Dict]:
+    """定义栈变量: [{"ea": "0x401000", "offset": 0x20, "name": "var_8", "type": "int"}]"""
+    """
+    items: List[Dict], 每个字典包含:
+      - 'ea': 函数内地址
+      - 'offset': 栈偏移, 来自 stack_frame 调用的结果中的offset.
+      - 'name': 变量名
+      - 'type': C 语言类型字符串 (例如 "int", "char[10]", "MyStruct *")
+    """
+    results = []
+    for item in items:
+        ea = int(item.get('ea'), 0) if isinstance(item.get('ea'), str) else item.get('ea')
+        raw_offset = int(item.get('offset'), 0) if isinstance(item.get('offset'), str) else item.get('offset')
+
+        name = item.get('name')
+        type_str = item.get('type', "int")
+        
+        pfn = ida_funcs.get_func(ea)
+        if not pfn: continue
+
+        # --- 核心转换步骤 ---
+        actual_offset = raw_offset - pfn.frsize
+        # --------------------
+
+        # 构造类型对象
+        tif = ida_typeinf.tinfo_t()
+        if not ida_typeinf.parse_decl(tif, None, f"{type_str} dummy;", 0):
+            ida_typeinf.parse_decl(tif, None, "char dummy;", 0)
+
+        # 定义/修改栈变量 (根据你之前的报错，使用 4 参数版本)
+        success = ida_frame.define_stkvar(pfn, name, actual_offset, tif)
+            
+        results.append({"name": name, "status": "success" if success else "failed"})
+    return results
+
+
+
+def delete_stack_variable(items: List[Dict]) -> List[Dict]:
+    """
+    删除指定原始偏移(Raw Offset)的栈变量。
+    ea: 函数地址
+    name: 变量名
+    """
+    results = []
+    for item in items:
+        fn_addr = int(item.get('ea'), 0) if isinstance(item.get('ea'), str) else item.get('ea')
+        var_name = item.get("name", "")
+
+        try:
+            func = idaapi.get_func(fn_addr)
+            if not func:
+                results.append(
+                    {"addr": fn_addr, "name": var_name, "error": "No function found"}
+                )
+                continue
+
+            frame_tif = ida_typeinf.tinfo_t()
+            if not ida_frame.get_func_frame(frame_tif, func):
+                results.append(
+                    {"addr": fn_addr, "name": var_name, "error": "No frame returned"}
+                )
+                continue
+
+            idx, udm = frame_tif.get_udm(var_name)
+            if not udm:
+                results.append(
+                    {
+                        "addr": fn_addr,
+                        "name": var_name,
+                        "error": f"{var_name} not found",
+                    }
+                )
+                continue
+
+            tid = frame_tif.get_udm_tid(idx)
+            if ida_frame.is_special_frame_member(tid):
+                results.append(
+                    {
+                        "addr": fn_addr,
+                        "name": var_name,
+                        "error": f"{var_name} is special frame member",
+                    }
+                )
+                continue
+
+            udm = ida_typeinf.udm_t()
+            frame_tif.get_udm_by_tid(udm, tid)
+            offset = udm.offset // 8
+            size = udm.size // 8
+            if ida_frame.is_funcarg_off(func, offset):
+                results.append(
+                    {
+                        "addr": fn_addr,
+                        "name": var_name,
+                        "error": f"{var_name} is argument member",
+                    }
+                )
+                continue
+
+            if not ida_frame.delete_frame_members(func, offset, offset + size):
+                results.append(
+                    {"addr": fn_addr, "name": var_name, "error": "Failed to delete"}
+                )
+                continue
+
+            results.append({"addr": fn_addr, "name": var_name, "status": True})
+        except Exception as e:
+            results.append({"addr": fn_addr, "name": var_name, "error": str(e)})
+
+    return results
+
+
+def read_struct_define(queries:List[str]):
+    """读取结构体 - 包含成员类型"""
+    results = []
+    for name in queries:
+        tif = idaapi.tinfo_t()
+        
+        # 尝试最通用的调用方式：传入本地库指针和名称字符串
+        # idati 是 IDA 内置的全局变量，代表当前的 Local Types 库
+        if not tif.get_named_type(idaapi.get_idati(), str(name)):
+            results.append({'fail':f"类型 {name} 不在 Local Types 中"})
+            return results
+
+        # 获取 UDT (User Defined Type) 详情
+        udt_data = idaapi.udt_type_data_t()
+        if not tif.get_udt_details(udt_data):
+            results.append({'fail':f"{name} 不是一个结构体或联合体"})
+            return results
+
+        members = []
+        for udm in udt_data:
+            # 注意：在 udt_member_t 中，offset 和 size 通常是以 bit(位) 为单位的
+            members.append({
+                "name": udm.name,
+                "offset": hex(udm.offset // 8), 
+                "size": udm.size // 8,
+                "type": udm.type.dstr() # 关键：返回 C 风格类型字符串
+            })
+
+        results.append( {
+            "name": name,
+            "size": tif.get_size(),
+            "members": members
+        })
+    return results
+
+
+def search_structs(pattern_str: str, ignore_case: bool = True) -> List[Dict]:
+    """
+    通过正则表达式搜索结构体
+    输入: {"f_regex": "^sock.*", "flags": 0} (flags可选, 如 re.IGNORECASE)
+    """
+    results = []
+    
+    # 预先获取所有结构体列表，避免在循环中重复解析
+    all_structs = list(idautils.Structs())
+
+    if ignore_case:
+        flags = re.IGNORECASE
+    else:
+        flags = 0    
+    try:
+        regex = re.compile(pattern_str, flags)
+    except re.error as e:
+        results.append({"pattern": pattern_str, "error": str(e)})
+        return results        
+    matched = []
+    for idx, sid, name in all_structs:
+        if regex.search(name):
+            matched.append({
+                "name": name,
+                "id": hex(sid),
+                "size": idc.get_struc_size(sid),
+                "idx": idx
+            })
+            
+    results.append({
+        "pattern": pattern_str,
+        "matches": matched
+    })
+    
+    return results
+
+def set_lvar_type(items: List[Dict]) -> List[Dict]:
+    """
+    在 IDA 9.0 中将伪代码变量设置为指定类型并持久化.
+    示例参数: [{'ea': 0x180084308, 'var_name': 'connection_info', 'struct_type': 'int *a;'}]
+    """
+    results = []
+
+    for item in items:
+        # 处理地址格式
+        ea_raw = item.get('ea')
+        ea = int(ea_raw, 0) if isinstance(ea_raw, str) else ea_raw
+        var_name = item.get('var_name')
+        struct_type = item.get('struct_type')
+        
+        success = False
+        applied_type = "N/A"
+        
+        # 1. 获取函数
+        func = ida_funcs.get_func(ea)
+        if not func:
+            results.append({"ea": hex(ea), "var": var_name, "success": False, "msg": "Function not found"})
+            continue
+
+        # 2. 反编译
+        cfunc = ida_hexrays.decompile(func.start_ea)
+        if not cfunc:
+            results.append({"ea": hex(ea), "var": var_name, "success": False, "msg": "Decompilation failed"})
+            continue
+
+        # 3. 构造 tinfo_t 类型
+        # 确保以分号结尾以符合 parse_decl 规范
+        decl_str = struct_type.strip()
+        if not decl_str.endswith(';'):
+            decl_str += ";"
+            
+        tinfo = ida_typeinf.tinfo_t()
+        # PT_TYP 表示解析的是类型声明
+        if ida_typeinf.parse_decl(tinfo, None, decl_str, 0):
+            lvars = cfunc.get_lvars()
+            for var in lvars:
+                if var.name == var_name:
+                    var.set_final_lvar_type(tinfo)
+                    cfunc.verify(True, True)
+                    applied_type = tinfo.dstr()
+                    success = True
+                    break
+        else:
+            applied_type = "Type parsing failed"
+
+        results.append({
+            "ea": hex(ea), 
+            "var": var_name, 
+            "type": applied_type, 
+            "success": success
+        })
+
+    return results
+
+def set_comments_at_disassembly(items: List[Dict]) -> List[Dict]:
+    """设置注释 - 函数式实现"""
+
+    results = []
+
+    for item in items:
+        addr = int(item.get('ea'), 0) if isinstance(item.get('ea'), str) else item.get('ea')
+        text = item.get("text", "")
+        is_repeatable = item.get("repeatable", False)
+
+        success = ida_bytes.set_cmt(addr, text, is_repeatable)
+
+        results.append({"addr": hex(addr), "success": success})
+
+    return results
+
+def add_pseudocode_comment(params: List[Dict]) -> List[Dict]:
+    # 1. 获取该地址所属的函数并反编译
+    for param in params:
+        ea = int(param.get('ea'), 0) if isinstance(param.get('ea'), str) else param.get('ea')
+        comment_text = param.get('text')
+        is_block = True if param.get('flag') == 'block' else False
+        results = []
+
+        cfunc = ida_hexrays.decompile(ea)
+        if not cfunc:
+            return False
+
+        # 2. 获取该地址对应的 ctree 节点 (citem_t)
+        item = cfunc.body.find_closest_addr(ea)
+        if not item:
+            return False
+
+        # ida_hexrays.ITP_SEMI (行末注释) 或 ida_hexrays.ITP_BLOCK (块注释)
+        tl = ida_hexrays.ITP_BLOCK1 if is_block else ida_hexrays.ITP_SEMI
+        
+        loc = ida_hexrays.treeloc_t()
+        loc.ea = item.ea
+        loc.itp = tl
+        
+        # 设置注释
+        cfunc.set_user_cmt(loc, comment_text)
+        cfunc.save_user_cmts()
+        cfunc.refresh_func_ctext()
+
+        results.append({"addr": hex(ea), "success": True})
+    return results
+
+def create_struct_from_c(params:List[str]) -> List[Dict]:
+    """
+    通过 C 语言声明创建结构体
+    :param c_declaration: C 语言结构体字符串，例如 "struct MyData { int a; char b[10]; };"
+    """
+    results = []
+    for c_declaration in params:
+        type_name = ""
+        
+        # 情况 A: 匹配 typedef struct { ... } Name;
+        typedef_match = re.search(r'}\s*([a-zA-Z0-9_]+)\s*;', c_declaration)
+        # 情况 B: 匹配 struct Name { ... };
+        struct_match = re.search(r'struct\s+([a-zA-Z0-9_]+)\s*\{', c_declaration)
+        
+        if typedef_match:
+            type_name = typedef_match.group(1)
+        elif struct_match:
+            type_name = struct_match.group(1)
+        else:
+            # 兜底：取最后一个分号前的单词
+            type_name = c_declaration.strip().rstrip(';').split()[-1]
+        sid = idc.get_struc_id(type_name)
+        if sid != idc.BADADDR:
+            results.append({'name':type_name, "status": "already exist"})
+            continue
+        if idc.parse_decls(c_declaration, 0) != 0:
+            raise ValueError("C 语法解析失败")
+
+        # 3. 同步到 Structures 窗口
+        # 注意：如果是 'struct new12'，import_type 内部会自动处理前缀
+        sid = idc.import_type(-1, type_name)
+        
+        if sid != idc.BADADDR:
+            results.append({'name':type_name, "status": "ok"})
+        else:
+            results.append({'name':type_name, "status": "can't import, name invalid"})
+    return results
+
+
+def define_func(items: List[Dict]) -> List[Dict]:
+    """定义函数 - 函数式实现"""
+
+    results = []
+
+    for item in items:
+        addr = int(item.get("addr"), 0)
+        name = item.get("name")
+
+        # Create function
+        success = ida_funcs.add_func(addr)
+
+        if success and name:
+            # Set function name
+            ida_name.set_name(addr, name, ida_name.SN_CHECK)
+
+        results.append({"address": hex(addr), "name": name, "success": success})
+
+    return results
+
+
+def define_code(items: List[Dict]) -> List[Dict]:
+    """定义代码 - 函数式实现"""
+
+    results = []
+    import ida_ua
+    for item in items:
+        addr = int(item.get("addr"), 0)
+
+        success = ida_ua.create_insn(addr)
+
+        results.append({"address": hex(addr), "success": success})
+
+    return results
+
+
+def undefine(items: List[Dict]) -> List[Dict]:
+    """取消定义 - 函数式实现"""
+
+    results = []
+    for item in items:
+        addr = int(item.get("addr"), 0)
+
+        # Try to undefine as function first
+        func = ida_funcs.get_func(addr)
+        if func:
+            success = ida_funcs.del_func(addr)
+        else:
+            # Undefine as data/code
+            success = ida_bytes.del_items(addr, ida_bytes.DELIT_SIMPLE)
+
+        results.append({"address": hex(addr), "success": success})
+
+    return results
+
+def init_globals():
+    global global_func_lists
+    global global_imports_lists
+    global global_Nams_lists
+
+    for i in range(ida_funcs.get_func_qty()):
+        func = ida_funcs.getn_func(i)
+        if not func:
+            continue
+        clean_name = get_readble_name(func.start_ea)
+        global_func_lists.append((clean_name, func.start_ea, func))
+
+    for ea, name in idautils.Names():
+        if ida_funcs.get_func(ea) is None:
+            global_Nams_lists.append((ea, get_readble_name(ea)))
+    
+    nimps = ida_nalt.get_import_module_qty()
+    for i in range(0, nimps):
+        module_name = ida_nalt.get_import_module_name(i)
+        def imp_cb(ea, name, ord):
+            global global_imports_lists
+            global_imports_lists.append((ea,name or f"ord_{ord}", module_name))
+            return True
+        ida_nalt.enum_import_names(i, imp_cb)
+    
+
+class IDAFunctions:
+    """
+    IDA功能包装类
+    用于在工作进程中调用函数式实现
+    """
+    def __init__(self):
+        init_globals()
+
+    def list_funcs(self, params: List) -> Dict:
+        offset = params[0]
+        limit = params[1]
+        contain = params[2]
+        return {"functions": list_funcs(offset, limit, contain)}
+
+    def list_globals(self, params: List) -> Dict:
+        offset = params[0]
+        limit = params[1]
+        contain = params[2]
+        return {"globals": list_globals(offset, limit, contain)}
+
+    def list_imports(self, params: List) -> Dict:
+        offset = params[0]
+        limit = params[1]
+        contain = params[2]
+        return {"imports": list_imports(offset, limit, contain)}
+
+    def lookup_funcs(self, params: List) -> Dict:
+        return {"functions": lookup_funcs(params)}
+
+    def decompile(self, addr: str) -> Dict:
+        return {"code": decompile(addr)}
+
+    def disasm(self, addr) -> Dict:
+        return {"instructions": disasm(addr)}
+
+    def xrefs_to(self, addrs: List) -> Dict:
+        return {"xrefs": xrefs_to(addrs)}
+
+    def xrefs_to_field(self, params: List[Dict]) -> Dict:
+        return {"xrefs": xrefs_to_field(params)}
+
+    def callees(self, params: List[str]) -> Dict:
+        return {"callees": callees(params)}
+
+    def get_bytes(self, params: List[str]) -> Dict:
+        return {"bytes": get_bytes(params)}
+
+    def get_int(self, params: List[Dict]) -> Dict:
+        return {"values": get_int(params)}
+
+    def read_string(self, params: List[str]) -> Dict:
+        return {"strings": read_string(params)}
+
+    def get_global_value(self, params: List[str]) -> Dict:
+        return {"values": get_global_value(params)}
+
+    def stack_frame(self, params: List[str]) -> Dict:
+        return {"frames": stack_frame(params)}
+
+    def declare_stack_variable(self, params: List[Dict]) -> Dict:
+        return {"results": declare_stack_variable(params)}
+
+    def delete_stack_variable(self, params: List[Dict]) -> Dict:
+        return {"results": delete_stack_variable(params)}
+
+    def read_struct_define(self, params: List[str]) -> Dict:
+        return {"structs": read_struct_define(params)}
+
+    def search_structs(self, params:List) -> Dict:
+        pattern_str = params[0]
+        ignore_case = params[1]
+        return {"structs": search_structs(pattern_str, ignore_case)}
+
+    def set_comments_at_disassembly(self, params:  List[Dict]) -> Dict:
+        return {"results": set_comments_at_disassembly(params)}
+
+    def define_func(self, params: List[Dict]) -> Dict:
+        return {"results": define_func(params)}
+
+    def define_code(self, params: List[Dict]) -> Dict:
+        return {"results": define_code(params)}
+
+    def undefine(self, params: List) -> Dict:
+        return {"results": undefine(params)}
+    
+    def create_struct_from_c(self, params: List[str]) -> Dict:
+        return {'results': create_struct_from_c(params)}
+    
+    def add_pseudocode_comment(self, params: List[Dict]) -> Dict:
+        return {'results': add_pseudocode_comment(params)}
+
+    def set_lvar_type(self, params: Dict) -> Dict:
+        return {'results': set_lvar_type(params)}
