@@ -350,27 +350,31 @@ def lookup_funcs(session_id: str, queries: List[str]) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def decompile(session_id: str, addr: str) -> str:
+def decompile(session_id: str, addr: str, offset: int = 0, limit: int = 0) -> Dict:
     """Decompile a function
 
     Args:
         session_id: The session ID
         addr: Function address or name
+        offset: Start offset for pagination
+        limit: Maximum number of results
     """
-    result = _call_ida_method(session_id, "decompile", addr)
-    return result.get("code", "")
+    result = _call_ida_method(session_id, "decompile", [addr, offset, limit])
+    return result.get("result", "")
 
 
 @mcp.tool()
-def disasm(session_id: str, addr: str) -> str:
+def disasm(session_id: str, addr: str, offset: int = 0, limit: int = 0) -> Dict:
     """Disassemble a function
 
     Args:
         session_id: The session ID
         addr: Function address or name
+        offset: Start offset for pagination
+        limit: Maximum number of results
     """
-    result = _call_ida_method(session_id, "disasm", addr)
-    return result.get("instructions", "")
+    result = _call_ida_method(session_id, "disasm", [addr, offset, limit])
+    return result.get("result", "")
 
 
 # MCP Tools - Cross References and Call Graph

@@ -173,21 +173,27 @@ def lookup_funcs(queries: List[str]) -> List[Dict]:
     return results
 
 
-def decompile(addr_or_name: str) -> str:
+def decompile(addr_or_name: str, offset: int = 0, limit: int = 0) -> Dict:
     """反编译函数 - 函数式实现"""
 
     # Parse address
     this_func = None
+    fname = None
+    faddr = None
     if isinstance(addr_or_name, str):
         try:
             addr = int(addr_or_name, 0)
             this_func = ida_funcs.get_func(addr)
             if not this_func:
                 raise ValueError(f"No function at address {addr_or_name}")
+            fname = get_readble_name(this_func.start_ea)
+            faddr = addr
         except:
             for clean_name,func_ea,func in global_func_lists:
                 if clean_name == addr_or_name:
                     this_func = func
+                    faddr = func.start_ea
+                    fname = clean_name
                     break
     if not this_func:
         raise ValueError(f"No function of {addr_or_name}")
@@ -196,11 +202,21 @@ def decompile(addr_or_name: str) -> str:
     if not cfunc:
         raise ValueError(f"Failed to decompile function at {addr_or_name}")
 
-    return str(cfunc)
+    string = str(cfunc)
+    if limit:
+        if len(string) > offset + limit:
+            string = string[offset: offset+limit]
+            result = {'func_name': fname, 'addr': hex(addr), 'offset':offset, 'code':string, 'next': offset + limit}
+        elif offset >= len(string):
+            result = {'error':'offset is too big'}
+        else:
+            result = {'func_name': fname, 'addr': hex(addr), 'offset':offset, 'code':string[offset:], 'done': True}
+    else:
+        result = {'func_name': fname, 'addr': hex(addr), 'code':string, 'done': True}
+    return result
 
-
-def disasm(addr_or_name: str) -> str:
-    """反汇编函数 - 获取函数的汇编代码或指定地址起的8条指令"""
+def disasm(addr_or_name: str, offset: int = 0, limit: int = 0) -> Dict:
+    """反汇编函数 - 获取函数的汇编代码或指定地址起的10条指令"""
     
     this_func = None
     addr = None
@@ -218,12 +234,16 @@ def disasm(addr_or_name: str) -> str:
                     addr = func.start_ea
                     break
 
-    results = []
+    output = []
+    result = {}
 
     # 情况 A: 找到了函数，反汇编整个函数
     if this_func:
         curr_addr = this_func.start_ea
         end_addr = this_func.end_ea
+
+        count = 0
+        cur = 0
         
         while curr_addr < end_addr:
             insn = idaapi.insn_t()
@@ -231,13 +251,25 @@ def disasm(addr_or_name: str) -> str:
             if insn_len <= 0: break
             
             disasm_text = idc.generate_disasm_line(curr_addr, 0)
-            results.append(f'{hex(curr_addr)}: {disasm_text}\n')
+            if offset <= cur:
+                output.append(f'{hex(curr_addr)}: {disasm_text}\n')
+                if limit:
+                    count += 1
+                    if count >= limit:
+                        break
+            cur += 1
             curr_addr += insn_len
+        if len(output) == 0:
+            result = {'err':'offset is two big'}
+        else:
+            output_string = ''.join(output)
+            result = {'codes': output_string, 'next': offset + limit}
 
-    # 情况 B: 未找到函数，但有有效地址，反汇编接下来的 8 条指令
+    # 情况 B: 未找到函数，但有有效地址，反汇编接下来的 10 条指令
     elif addr is not None:
         curr_addr = addr
-        for _ in range(8):
+        output.append('addr is not in a function. show 10 instructions:\n')
+        for _ in range(10):
             insn = idaapi.insn_t()
             insn_len = idaapi.decode_insn(insn, curr_addr)
             
@@ -250,12 +282,13 @@ def disasm(addr_or_name: str) -> str:
                 disasm_text = "db " + " ".join(
                     f"{b:02X}" for b in idaapi.get_bytes(curr_addr, insn_len)
                 )
-            results.append(f'{hex(curr_addr)}: {disasm_text}\n')
+            output.append(f'{hex(curr_addr)}: {disasm_text}\n')
             curr_addr += insn_len
+        output_string = ''.join(output)
+        result = {'codes': output_string, 'next inst at addr': hex(curr_addr)}
     else:
         raise ValueError(f"Could not resolve address or function: {addr_or_name}")
-
-    return ''.join(results)
+    return result
 
 
 def xrefs_to(addrs: Union[str, List[str]]) -> List[Dict]:
@@ -1025,11 +1058,17 @@ class IDAFunctions:
     def lookup_funcs(self, params: List) -> Dict:
         return {"functions": lookup_funcs(params)}
 
-    def decompile(self, addr: str) -> Dict:
-        return {"code": decompile(addr)}
+    def decompile(self, params: List) -> Dict:
+        addr_or_name = params[0]
+        offset = params[1]
+        limit = params[2]
+        return {"result": decompile(addr_or_name, offset, limit)}
 
-    def disasm(self, addr) -> Dict:
-        return {"instructions": disasm(addr)}
+    def disasm(self, params: List) -> Dict:
+        addr_or_name = params[0]
+        offset = params[1]
+        limit = params[2]
+        return {"result": disasm(addr_or_name, offset, limit)}
 
     def xrefs_to(self, addrs: List) -> Dict:
         return {"xrefs": xrefs_to(addrs)}

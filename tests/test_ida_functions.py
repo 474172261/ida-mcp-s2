@@ -29,6 +29,7 @@ import ida_name
 
 # 导入要测试的模块
 from ida_mcp_s2 import ida_functions
+from ida_mcp_s2.utils import debug_stop
 
 # 测试统计
 test_results = {
@@ -143,7 +144,19 @@ def run_tests(functions:ida_functions.IDAFunctions):
         test_function(
             "decompile",
             functions.decompile,
-            func_addr
+            [func_addr, 0, 20]
+        )
+
+        test_function(
+            "decompile",
+            functions.decompile,
+            [func_addr, 20, 200]
+        )
+
+        test_function(
+            "decompile",
+            functions.decompile,
+            [func_addr, 20, 20000]
         )
     
     # 8. 测试 disasm
@@ -151,13 +164,21 @@ def run_tests(functions:ida_functions.IDAFunctions):
         test_function(
             "disasm",
             functions.disasm,
-            func_addr
+            [func_addr, 0, 10]
         )
+
+        test_function(
+            "disasm",
+            functions.disasm,
+            [func_addr, 10, 10]
+        )
+
     test_function(
         "disasm",
         functions.disasm,
-        func_name
+        [func_name, 0, 0]
     )
+
     
     # 9. 测试 xrefs_to
     if func_addr:

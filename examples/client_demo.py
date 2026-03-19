@@ -116,26 +116,26 @@ class IDAMCPClient:
                 return json.loads(item.text if item.text else "{}")
         return {}
 
-    async def decompile(self, addr: str) -> str:
+    async def decompile(self, addr: str, offset: int = 0, limit: int = 0) -> str:
         """反编译函数"""
         if not self.session_id:
             return "Error: No active session"
 
         content = await self._call_tool(
-            "decompile", {"session_id": self.session_id, "addr": addr}
+            "decompile", {"session_id": self.session_id, "addr": addr, 'offset': offset, 'limit': limit}
         )
         for item in content:
             if item.type == "text":
                 return item.text if item.text else ""
         return ""
 
-    async def disasm(self, addr: str) -> str:
+    async def disasm(self, addr: str, offset: int = 0, limit: int = 0) -> str:
         """反汇编函数"""
         if not self.session_id:
             return "Error: No active session"
 
         content = await self._call_tool(
-            "disasm", {"session_id": self.session_id, "addr": addr}
+            "disasm", {"session_id": self.session_id, "addr": addr, 'offset': offset, 'limit': limit}
         )
         for item in content:
             if item.type == "text":
@@ -521,12 +521,24 @@ async def demo():
 
         # 9. 反编译函数
         print_section(f"9. Decompile Function: {func_addr}")
+        decompiled = await client.decompile(func_addr, 0, 10)
+        print_result("Decompiled Code", decompiled[:1000])
+
+        print_section(f"9.1. Decompile Function: {func_addr}")
+        decompiled = await client.decompile(func_addr, 10, 30)
+        print_result("Decompiled Code", decompiled[:1000])
+
+        print_section(f"9.2. Decompile Function: {func_addr}")
         decompiled = await client.decompile(func_addr)
         print_result("Decompiled Code", decompiled[:1000])
 
         # 10. 反汇编函数
         print_section(f"10. Disassemble Function: {func_addr}")
-        disassembled = await client.disasm(func_addr)
+        disassembled = await client.disasm(func_addr, 0, 10)
+        print_result("Disassembly", disassembled[:1000])
+
+        print_section(f"10.1 Disassemble Function: {func_addr}")
+        disassembled = await client.disasm(func_addr, 10, 30)
         print_result("Disassembly", disassembled[:1000])
 
         # 11. 获取交叉引用
