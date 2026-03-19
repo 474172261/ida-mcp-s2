@@ -29,6 +29,7 @@ mcp = FastMCP("ida-mcp-s1")
 sessions: Dict[str, "IDASession"] = {}
 session_lock = threading.Lock()
 db_dir: Path = Path(".")
+g_persist_changes = False
 
 
 class IDASession:
@@ -38,10 +39,11 @@ class IDASession:
     """
 
     def __init__(self, session_id: str, db_path: str):
+        global g_persist_changes
         self.session_id = session_id
         self.db_path = db_path
         self.logger = get_logger()
-        self.persist_changes = False
+        self.persist_changes = g_persist_changes
 
         # Create two socket pairs: one for RPC, one for logs
         self.parent_sock, self.child_sock = socket.socketpair()
@@ -386,7 +388,7 @@ def xrefs_to(session_id: str, addrs: List[str]) -> Dict[str, Any]:
 
     Args:
         session_id: The session ID
-        addrs: List of addresses to find references to
+        addrs: List of addresses to find references to. eg: Data address/name, code address, func name/address.
     """
     return _call_ida_method(session_id, "xrefs_to", addrs)
 
@@ -675,8 +677,10 @@ def init_server(database_dir: str):
     db_dir = Path(database_dir)
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8080):
+def run_server(host: str = "0.0.0.0", port: int = 8080, persist_changes: bool = False):
     """Run the MCP server with HTTP transport"""
+    global g_persist_changes
+    g_persist_changes = persist_changes
     logger = get_logger()
     logger.info(f"Starting IDA MCP Server on {host}:{port}")
     logger.info(f"Database directory: {db_dir}")

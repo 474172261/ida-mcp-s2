@@ -39,6 +39,7 @@ def main():
     parser.add_argument(
         "--ida-path", default=None, help="Path to IDA installation directory"
     )
+    parser.add_argument("--save_change", action="store_true", help="save change into database")
 
     args = parser.parse_args()
 
@@ -70,7 +71,7 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     try:
-        run_server(host=args.host, port=args.port)
+        run_server(host=args.host, port=args.port, persist_changes = args.save_change)
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except Exception as e:

@@ -31,6 +31,11 @@ class IDAMCPClient:
             await session.ping()
         print("MCP session established and initialized.")
 
+    async def list_tools(self):
+        async with self.session as session:
+            result = await session.list_tools()
+            return result
+
     async def _async_call_tool(self, tool_name: str, params: Dict[str, Any]) -> Any:
         assert self.session is not None
         async with self.session as session:
@@ -471,6 +476,10 @@ async def demo():
     struct_field = "RequestInfoCount"
     await client.connect()
     print_section("IDA MCP Client Demo - 完整功能测试")
+    result = await client.list_tools()
+    for each in result:
+        print(f"name:{each.name}")
+        print(f"descrition:{each.description}")
     try:
         # 1. 列出数据库
         print_section("1. List Databases")
