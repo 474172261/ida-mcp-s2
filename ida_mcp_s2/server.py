@@ -608,11 +608,11 @@ def add_pseudocode_comment(
 def set_lvar_type(
     session_id: str, items: List[Dict[str, Any]]
 ) -> Dict[str, Any]:
-    """Set local variable type as structure pointer
+    """Set local variable type in pseudocode
 
     Args:
         session_id: The session ID
-        items: List of {ea: str/int, var_name: str, struct_type: str}
+        items: List of {ea: str/int, var_name: str, struct_type: str, new_name: str}, new_name is optional
     """
     return _call_ida_method(session_id, "set_lvar_type", items)
 

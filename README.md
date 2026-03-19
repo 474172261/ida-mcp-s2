@@ -122,7 +122,7 @@ GET /mcp
 - `add_pseudocode_comment`: 添加反编译代码注释
 
 #### 类型操作
-- `set_lvar_type`: 设置局部变量类型
+- `set_lvar_type`: 设置伪c代码局部变量类型
 
 #### 修改操作
 - `define_func`: 定义函数

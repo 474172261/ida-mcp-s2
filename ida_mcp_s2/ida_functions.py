@@ -746,10 +746,11 @@ def search_structs(pattern_str: str, ignore_case: bool = True) -> List[Dict]:
     
     return results
 
+
 def set_lvar_type(items: List[Dict]) -> List[Dict]:
     """
     在 IDA 9.0 中将伪代码变量设置为指定类型并持久化.
-    示例参数: [{'ea': 0x180084308, 'var_name': 'connection_info', 'struct_type': 'int *a;'}]
+    示例参数: [{'ea': 0x180084308, 'var_name': 'v1', 'struct_type': 'int *a;', 'new_name':'v2'}], new_name is Optional
     """
     results = []
 
@@ -759,9 +760,9 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
         ea = int(ea_raw, 0) if isinstance(ea_raw, str) else ea_raw
         var_name = item.get('var_name')
         struct_type = item.get('struct_type')
+        new_name = item.get('new_name', None)
         
         success = False
-        applied_type = "N/A"
         
         # 1. 获取函数
         func = ida_funcs.get_func(ea)
@@ -774,6 +775,11 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
         if not cfunc:
             results.append({"ea": hex(ea), "var": var_name, "success": False, "msg": "Decompilation failed"})
             continue
+        
+        if new_name:
+            if not ida_hexrays.rename_lvar(ea, var_name, new_name):
+                results.append({"ea": hex(ea), "var": var_name, "success": False, "msg": "rename fail"})
+                continue
 
         # 3. 构造 tinfo_t 类型
         # 确保以分号结尾以符合 parse_decl 规范
@@ -785,29 +791,32 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
         # PT_TYP 表示解析的是类型声明
         if ida_typeinf.parse_decl(new_type, None, decl_str, 0):
             lvars = cfunc.get_lvars()
-            for var in lvars:
-                if var.name == var_name:
-                    if not var.accepts_type(new_type):
-                        success = False
-                        applied_type = "type is not accepted"
-                        break
-
-                    var.set_lvar_type(new_type)
+            var = None
+            for lvar in lvars:
+                if lvar.name == var_name:
+                    var = lvar
+            if var:
+                if not var.accepts_type(new_type):
+                    success = False
+                    msg = "type is not accepted"
+                else:
+                    # var.set_lvar_type(new_type)
                     lsi = ida_hexrays.lvar_saved_info_t()
                     lsi.ll = var
                     lsi.type = new_type
                     ida_hexrays.modify_user_lvar_info(func.start_ea, ida_hexrays.MLI_TYPE, lsi)
-                    applied_type = new_type.dstr()
-
+                    msg = 'type now is:'+ new_type.dstr()
                     success = True
-                    break
+            else:
+                msg = f"can't find var name:{var_name}"
+
         else:
-            applied_type = "Type parsing failed"
+            msg = "parse c defination fail"
 
         results.append({
             "ea": hex(ea), 
             "var": var_name, 
-            "type": applied_type, 
+            "msg": msg, 
             "success": success
         })
 
