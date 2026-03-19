@@ -12,7 +12,7 @@ import struct
 import threading
 import time
 import uuid
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Optional, Union, Annotated
 from pathlib import Path
 import multiprocessing
 import sys
@@ -668,6 +668,15 @@ def undefine(session_id: str, items: List[Dict[str, Any]]) -> Dict[str, Any]:
         items: List of {addr: str/int}
     """
     return _call_ida_method(session_id, "undefine", items)
+
+@mcp.tool()
+def find_bytes(session_id: str, patterns:Union[list[str], str], offset:int = 0, limit: int = 1000):
+    """Search for byte patterns in the binary (supports wildcards with ??)
+        patterns: Byte patterns to search for (e.g. '48 8B ?? ??')
+        offset: Skip first N matches (default: 0)
+        limit: Max matches per pattern (default: 1000, max: 10000)
+    """
+    return _call_ida_method(session_id, "find_bytes", [patterns, offset, limit])
 
 
 # Server lifecycle functions

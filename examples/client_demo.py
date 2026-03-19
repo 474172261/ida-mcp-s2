@@ -8,7 +8,7 @@ import requests
 import json
 import sys
 import uuid
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from fastmcp import Client
 import asyncio
 import mcp
@@ -102,7 +102,15 @@ class IDAMCPClient:
         if not self.session_id:
             return {"error": "No active session"}
 
-        content = await self._call_tool("list_funcs", {'session_id':self.session_id, 'offset':offset, 'limit':limit, 'contain':contain})
+        content = await self._call_tool(
+            "list_funcs",
+            {
+                "session_id": self.session_id,
+                "offset": offset,
+                "limit": limit,
+                "contain": contain,
+            },
+        )
         for item in content:
             if item.type == "text":
                 return json.loads(item.text if item.text else "{}")
@@ -127,7 +135,13 @@ class IDAMCPClient:
             return "Error: No active session"
 
         content = await self._call_tool(
-            "decompile", {"session_id": self.session_id, "addr": addr, 'offset': offset, 'limit': limit}
+            "decompile",
+            {
+                "session_id": self.session_id,
+                "addr": addr,
+                "offset": offset,
+                "limit": limit,
+            },
         )
         for item in content:
             if item.type == "text":
@@ -140,7 +154,13 @@ class IDAMCPClient:
             return "Error: No active session"
 
         content = await self._call_tool(
-            "disasm", {"session_id": self.session_id, "addr": addr, 'offset': offset, 'limit': limit}
+            "disasm",
+            {
+                "session_id": self.session_id,
+                "addr": addr,
+                "offset": offset,
+                "limit": limit,
+            },
         )
         for item in content:
             if item.type == "text":
@@ -224,14 +244,22 @@ class IDAMCPClient:
             if item.type == "text":
                 return json.loads(item.text if item.text else "[]")
         return []
-    
-    async def search_in_strings_window(self, pattern: str, offset: int = 0, limit: int = 10) -> List[Dict]:
+
+    async def search_in_strings_window(
+        self, pattern: str, offset: int = 0, limit: int = 10
+    ) -> List[Dict]:
         """读取字符串"""
         if not self.session_id:
             return []
 
         content = await self._call_tool(
-            "search_in_strings_window", {"session_id": self.session_id, "pattern": pattern, 'offset': offset, 'limit': limit}
+            "search_in_strings_window",
+            {
+                "session_id": self.session_id,
+                "pattern": pattern,
+                "offset": offset,
+                "limit": limit,
+            },
         )
         for item in content:
             if item.type == "text":
@@ -270,14 +298,21 @@ class IDAMCPClient:
             print(e)
         return []
 
-    async def list_imports(self, offset: int = 0, limit: int = 10, contain:Optional[str] = "*") -> List[Dict]:
+    async def list_imports(
+        self, offset: int = 0, limit: int = 10, contain: Optional[str] = "*"
+    ) -> List[Dict]:
         """列出导入符号"""
         if not self.session_id:
             return []
 
         content = await self._call_tool(
             "list_imports",
-            {"session_id": self.session_id, "offset": offset, "limit": limit, 'contain': contain},
+            {
+                "session_id": self.session_id,
+                "offset": offset,
+                "limit": limit,
+                "contain": contain,
+            },
         )
         for item in content:
             if item.type == "text":
@@ -336,14 +371,20 @@ class IDAMCPClient:
                 return json.loads(item.text if item.text else "[]")
         return []
 
-    async def search_structs(self, pattern_str: str, ignore_case: bool = True) -> List[Dict]:
+    async def search_structs(
+        self, pattern_str: str, ignore_case: bool = True
+    ) -> List[Dict]:
         """搜索结构体"""
         if not self.session_id:
             return []
 
         content = await self._call_tool(
             "search_structs",
-            {"session_id": self.session_id, "pattern_str": pattern_str, 'ignore_case': ignore_case},
+            {
+                "session_id": self.session_id,
+                "pattern_str": pattern_str,
+                "ignore_case": ignore_case,
+            },
         )
         for item in content:
             if item.type == "text":
@@ -378,16 +419,14 @@ class IDAMCPClient:
                 return json.loads(item.text if item.text else "[]")
         return []
 
-    async def add_pseudocode_comment(
-        self, params:List[Dict]
-    ) -> List[Dict]:
+    async def add_pseudocode_comment(self, params: List[Dict]) -> List[Dict]:
         """添加伪代码注释"""
         if not self.session_id:
             return []
 
         content = await self._call_tool(
             "add_pseudocode_comment",
-            {"session_id": self.session_id, 'params':params},
+            {"session_id": self.session_id, "params": params},
         )
         for item in content:
             if item.type == "text":
@@ -441,6 +480,27 @@ class IDAMCPClient:
 
         content = await self._call_tool(
             "undefine", {"session_id": self.session_id, "items": items}
+        )
+        for item in content:
+            if item.type == "text":
+                return json.loads(item.text if item.text else "[]")
+        return []
+
+    async def find_bytes(
+        self, patterns: Union[List[str], str], offset: int = 0, limit: int = 10
+    ) -> List[Dict]:
+        """搜索字节模式"""
+        if not self.session_id:
+            return []
+
+        content = await self._call_tool(
+            "find_bytes",
+            {
+                "session_id": self.session_id,
+                "patterns": patterns,
+                "offset": offset,
+                "limit": limit,
+            },
         )
         for item in content:
             if item.type == "text":
@@ -503,9 +563,7 @@ async def demo():
 
         # 4. 列出函数（带过滤）
         print_section("4. List Functions with contain 'Handle'")
-        funcs_filtered = await client.list_funcs(
-            offset=0, limit=5, contain="Handle"
-        )
+        funcs_filtered = await client.list_funcs(offset=0, limit=5, contain="Handle")
         print_result("Filtered Functions", funcs_filtered)
 
         # 5. 列出全局变量
@@ -583,7 +641,7 @@ async def demo():
         strings = await client.read_string([test_string_addr])
         print_result("Strings", strings)
 
-        search_string = 'pszUnauthenticatedUserName'
+        search_string = "pszUnauthenticatedUserName"
         print_section(f"16-1. search_in_strings_window {search_string}")
         strings = await client.search_in_strings_window(search_string)
         print_result("Strings", strings)
@@ -600,7 +658,7 @@ async def demo():
 
         # 18. 获取全局变量值（通过名称）
         print_section(f"18. Get Global Value by Name: {test_global_name}")
-        global_val_name = await client.get_global_value(['not_exist_name'])
+        global_val_name = await client.get_global_value(["not_exist_name"])
         print_result("Global Value", global_val_name)
 
         # 19. 获取栈帧信息
@@ -650,7 +708,7 @@ async def demo():
         pseudocode_addr = "0x180077CBD"
         print_section(f"25. Add Pseudocode Comment at {pseudocode_addr}")
         pseudocode_comment = await client.add_pseudocode_comment(
-            [{'ea':pseudocode_addr, 'text':"Test pseudocode comment from client"}]
+            [{"ea": pseudocode_addr, "text": "Test pseudocode comment from client"}]
         )
         print_result("Pseudocode Comment Result", pseudocode_comment)
 
@@ -683,6 +741,11 @@ async def demo():
             [{"addr": func_addr, "name": func_name}]
         )
         print_result("Define Function Result", define_func_result)
+
+        # 31. 搜索字节模式
+        print_section("31. Find Bytes: '48 8D AC 24  ?? 9A'")
+        find_bytes_result = await client.find_bytes("48 8D AC 24  ?? 9A", 0, 10)
+        print_result("Find Bytes Result", find_bytes_result)
 
     except Exception as e:
         print(f"\nError during demo: {e}")

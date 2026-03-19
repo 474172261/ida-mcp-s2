@@ -70,6 +70,8 @@ python main.py --db-dir /path/to/ida/databases --debug
 - `--db-dir`: IDA数据库文件目录（必需）
 - `--debug`: 启用调试日志
 - `--ida-path`: IDA安装目录（可选）
+- `--save_change`: 默认不存储对ida数据库的改动, 添加此参数可保存改动（可选）
+
 
 ### MCP端点
 
@@ -101,6 +103,7 @@ GET /mcp
 - `get_bytes`: 读取原始字节
 - `get_int`: 读取整数（支持多种类型）
 - `read_string`: 读取字符串
+- `search_in_strings_window`: 搜索字符串窗口（支持正则、分页）
 
 #### 全局变量和导入
 - `list_globals`: 列出全局变量（支持分页和过滤）
@@ -113,7 +116,7 @@ GET /mcp
 - `delete_stack_variable`: 删除栈变量
 
 #### 结构体操作
-- `read_struct_define`: 读取结构体字段值
+- `read_struct_define`: 读取结构体定义
 - `search_structs`: 搜索结构体
 - `create_struct_from_c`: 从C声明创建结构体
 
@@ -128,6 +131,9 @@ GET /mcp
 - `define_func`: 定义函数
 - `define_code`: 转换为代码指令
 - `undefine`: 取消定义
+
+#### 字节搜索
+- `find_bytes`: 搜索字节模式（支持 ?? 通配符、分页）
 
 ### 使用示例
 

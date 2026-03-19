@@ -4,7 +4,7 @@ IDA功能实现
 """
 import ida_idaapi
 import idautils
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Annotated
 import json
 import ida_funcs
 import ida_name
@@ -995,6 +995,52 @@ def undefine(items: List[Dict]) -> List[Dict]:
 
     return results
     
+def find_bytes(
+    patterns: Annotated[Union[list[str], str], "Patterns (e.g. '48 8B ?? ??')"],
+    offset: Annotated[int, "Skip N matches"] = 0,
+    limit: Annotated[int, "Max matches"] = 1000,
+) -> list[dict]:
+    """
+    在 IDA 中搜索字节模式，支持通配符 ?? 和分页。
+    matches = find_bytes("48 8B ?? ??", limit=10, offset=0)
+    matches_multiple = find_bytes(["48 89", "E8 ?? ?? ?? ??"], limit=5)
+
+    """
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    
+    results = []
+    min_ea = idc.get_inf_attr(idc.INF_MIN_EA)
+    max_ea = idc.get_inf_attr(idc.INF_MAX_EA)
+
+    for pat in patterns:
+        curr_ea = min_ea
+        count = 0
+        # Calculate length by counting hex pairs (ignoring spaces/wildcards)
+        pat_len = len(pat.split())
+        tokens = pat.strip().split()
+        normalized = " ".join("?" if t in ("??", "?") else t for t in tokens)  
+        
+        while len(results) < limit:
+            # find_bytes returns the EA or ida_idc.BADADDR
+            curr_ea = ida_bytes.find_bytes(normalized, curr_ea, range_end=max_ea)
+            
+            if curr_ea == idc.BADADDR:
+                break
+                
+            if count >= offset:
+                val = ida_bytes.get_bytes(curr_ea, pat_len)
+                results.append({
+                    "address": hex(curr_ea),
+                    "match_value": val.hex(' ').upper() if val else "",
+                    "disasm": idc.generate_disasm_line(curr_ea, 0)
+                })
+            
+            count += 1
+            curr_ea += 1 # Advance to find next
+            
+    return results
+
 
 def init_globals():
     global global_func_lists
@@ -1134,3 +1180,9 @@ class IDAFunctions:
 
     def set_lvar_type(self, params: Dict) -> Dict:
         return {'results': set_lvar_type(params)}
+    
+    def find_bytes(self, params: List) -> Dict:
+        patterns = params[0]
+        offset = params[1]
+        limit = params[2]
+        return {'results': find_bytes(patterns, offset, limit)}
