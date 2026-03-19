@@ -224,6 +224,8 @@ def run_tests(functions: ida_functions.IDAFunctions):
 
     test_function("find_bytes", functions.find_bytes, ["48 8D AC 24  ?? 9A", 0, 10])
 
+    test_function("py_eval", functions.py_eval, "print(1)\nimport idapro")
+
     test_function(
         "set_lvar_type",
         functions.set_lvar_type,

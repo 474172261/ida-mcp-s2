@@ -507,6 +507,19 @@ class IDAMCPClient:
                 return json.loads(item.text if item.text else "[]")
         return []
 
+    async def py_eval(self, code: str) -> Dict:
+        """执行Python代码"""
+        if not self.session_id:
+            return {}
+
+        content = await self._call_tool(
+            "py_eval", {"session_id": self.session_id, "code": code}
+        )
+        for item in content:
+            if item.type == "text":
+                return json.loads(item.text if item.text else "{}")
+        return {}
+
 
 def print_section(title: str):
     """打印章节标题"""
@@ -746,6 +759,11 @@ async def demo():
         print_section("31. Find Bytes: '48 8D AC 24  ?? 9A'")
         find_bytes_result = await client.find_bytes("48 8D AC 24  ?? 9A", 0, 10)
         print_result("Find Bytes Result", find_bytes_result)
+
+        # 32. 执行Python代码
+        print_section("32. py_eval: 'print(1)\\nimport idapro'")
+        py_eval_result = await client.py_eval("print(1)\nimport idapro")
+        print_result("py_eval Result", py_eval_result)
 
     except Exception as e:
         print(f"\nError during demo: {e}")

@@ -1,6 +1,6 @@
 # IDA MCP Server
 
-基于IDA Pro IDALib的MCP (Model Context Protocol) Server实现，支持多进程、SSE接口和Session管理。
+基于IDA Pro IDALib的MCP (Model Context Protocol) Server实现，相较于 ida-pro-mcp, 本项目可以同时打开多个库, 更简洁的架构, 方便测试和添加功能。
 
 ## 特性
 
@@ -14,8 +14,8 @@
 
 ### 前提条件
 
-1. 安装IDA Pro 8.0或更高版本
-2. 确保 `idalib` Python模块可用（由IDA Pro提供）
+1. 安装IDA Pro 8.4或更高版本
+2. 参考 [idalib介绍](https://docs.hex-rays.com/user-guide/idalib), 安装它. 确保在python中可以`import idapro`
 3. Python 3.8+
 
 ### 设置
@@ -27,18 +27,6 @@ cd ida-mcp-s2
 
 # 安装依赖
 pip install -r requirements.txt
-```
-
-### 环境变量
-
-设置IDA Pro路径（如果使用非标准安装路径）：
-
-```bash
-# Linux/Mac
-export IDA_PATH=/opt/ida-pro
-
-# Windows
-set IDA_PATH=C:\Program Files\IDA Pro 8.0
 ```
 
 ## 项目结构
@@ -69,7 +57,6 @@ python main.py --db-dir /path/to/ida/databases --debug
 - `--port`: 服务器端口 (默认: 8080)
 - `--db-dir`: IDA数据库文件目录（必需）
 - `--debug`: 启用调试日志
-- `--ida-path`: IDA安装目录（可选）
 - `--save_change`: 默认不存储对ida数据库的改动, 添加此参数可保存改动（可选）
 
 
@@ -134,6 +121,9 @@ GET /mcp
 
 #### 字节搜索
 - `find_bytes`: 搜索字节模式（支持 ?? 通配符、分页）
+
+#### 代码执行
+- `py_eval`: 在IDA上下文中执行Python代码
 
 ### 使用示例
 
@@ -343,3 +333,6 @@ MIT License
 ## 贡献
 
 欢迎提交Issue和Pull Request！
+
+## 致谢
+感谢 https://github.com/mrexodia/ida-pro-mcp 项目, 它给了我很多参考.

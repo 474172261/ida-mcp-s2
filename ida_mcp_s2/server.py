@@ -678,7 +678,16 @@ def find_bytes(session_id: str, patterns:Union[list[str], str], offset:int = 0, 
     """
     return _call_ida_method(session_id, "find_bytes", [patterns, offset, limit])
 
+@mcp.tool()
+def py_eval(session_id: str, code: str) -> Dict[str, Any]:
+    """Execute Python code in IDA context
 
+    Args:
+        session_id: The session ID
+        code: Python code to execute
+    """
+    return _call_ida_method(session_id, "py_eval", code)
+                             
 # Server lifecycle functions
 def init_server(database_dir: str):
     """Initialize server with database directory"""

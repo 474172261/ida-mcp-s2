@@ -3,8 +3,8 @@
 # Core dependencies
 # Note: idalib is provided by IDA Pro installation and not available via pip
 mcp>=1.6.0
-uvicorn>=0.24.0
-starlette>=0.27.0
+fastmcp>=3.0.0
+requests>=2.28.0
 
 # Optional dependencies for enhanced functionality
 # Uncomment if needed

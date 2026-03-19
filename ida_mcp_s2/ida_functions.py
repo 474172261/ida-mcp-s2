@@ -19,6 +19,15 @@ import ida_frame
 import re
 import ida_typeinf
 import ida_strlist
+import ast
+import io
+import sys
+import ida_ida
+import ida_dbg
+import ida_entry
+import ida_kernwin
+import ida_lines
+import ida_segment
 from ida_mcp_s2.utils import get_wide_strings_manually, get_readble_name, debug_stop
 
 
@@ -1041,6 +1050,144 @@ def find_bytes(
             
     return results
 
+def py_eval(code: Annotated[str, "Python code"]) -> dict:
+    """Execute Python code in IDA context with accurate error line reporting."""
+    stdout_capture = io.StringIO()
+    stderr_capture = io.StringIO()
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+
+    # 预定义执行环境 (建议在函数外初始化以提高性能，这里为了完整性保留)
+    def lazy_import(module_name):
+        try:
+            return __import__(module_name)
+        except:
+            return None
+
+    exec_globals = {
+        "__builtins__": __builtins__,
+        "idaapi": idaapi,
+        "idc": idc,
+        "idautils": lazy_import("idautils"),
+        "ida_allins": lazy_import("ida_allins"),
+        "ida_auto": lazy_import("ida_auto"),
+        "ida_bitrange": lazy_import("ida_bitrange"),
+        "ida_bytes": ida_bytes,
+        "ida_dbg": ida_dbg,
+        "ida_dirtree": lazy_import("ida_dirtree"),
+        "ida_diskio": lazy_import("ida_diskio"),
+        "ida_entry": ida_entry,
+        "ida_expr": lazy_import("ida_expr"),
+        "ida_fixup": lazy_import("ida_fixup"),
+        "ida_fpro": lazy_import("ida_fpro"),
+        "ida_frame": ida_frame,
+        "ida_funcs": ida_funcs,
+        "ida_gdl": lazy_import("ida_gdl"),
+        "ida_graph": lazy_import("ida_graph"),
+        "ida_hexrays": ida_hexrays,
+        "ida_ida": ida_ida,
+        "ida_idd": lazy_import("ida_idd"),
+        "ida_idp": lazy_import("ida_idp"),
+        "ida_ieee": lazy_import("ida_ieee"),
+        "ida_kernwin": ida_kernwin,
+        "ida_libfuncs": lazy_import("ida_libfuncs"),
+        "ida_lines": ida_lines,
+        "ida_loader": lazy_import("ida_loader"),
+        "ida_merge": lazy_import("ida_merge"),
+        "ida_mergemod": lazy_import("ida_mergemod"),
+        "ida_moves": lazy_import("ida_moves"),
+        "ida_nalt": ida_nalt,
+        "ida_name": ida_name,
+        "ida_netnode": lazy_import("ida_netnode"),
+        "ida_offset": lazy_import("ida_offset"),
+        "ida_pro": lazy_import("ida_pro"),
+        "ida_problems": lazy_import("ida_problems"),
+        "ida_range": lazy_import("ida_range"),
+        "ida_regfinder": lazy_import("ida_regfinder"),
+        "ida_registry": lazy_import("ida_registry"),
+        "ida_search": lazy_import("ida_search"),
+        "ida_segment": ida_segment,
+        "ida_segregs": lazy_import("ida_segregs"),
+        "ida_srclang": lazy_import("ida_srclang"),
+        "ida_strlist": lazy_import("ida_strlist"),
+        "ida_struct": lazy_import("ida_struct"),
+        "ida_tryblks": lazy_import("ida_tryblks"),
+        "ida_typeinf": ida_typeinf,
+        "ida_ua": lazy_import("ida_ua"),
+        "ida_undo": lazy_import("ida_undo"),
+        "ida_xref": ida_xref,
+        "ida_enum": lazy_import("ida_enum"),
+    }
+    exec_locals = {}
+    result_value = None
+
+    try:
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
+
+        # 1. 语法解析阶段
+        try:
+            tree = ast.parse(code, filename="<user_code>")
+        except SyntaxError as e:
+            # 语法错误直接返回，避免混入 py_eval 的堆栈
+            return {
+                "result": "",
+                "stdout": "",
+                "stderr": f'  File "<user_code>", line {e.lineno}\n    {e.text or ""}\nSyntaxError: {e.msg}',
+            }
+
+        # 2. 执行逻辑处理
+        if not tree.body:
+            pass
+        elif len(tree.body) == 1 and isinstance(tree.body[0], ast.Expr):
+            # 单行表达式
+            expr_code = compile(
+                ast.Expression(body=tree.body[0].value), "<user_code>", "eval"
+            )
+            result_value = eval(expr_code, exec_globals, exec_locals)
+        else:
+            # 多行逻辑 (Jupyter 风格：最后一行如果是表达式则返回其值)
+            last_node = tree.body[-1]
+            if isinstance(last_node, ast.Expr):
+                # 执行前面的语句
+                exec_tree = ast.Module(body=tree.body[:-1], type_ignores=[])
+                exec(
+                    compile(exec_tree, "<user_code>", "exec"), exec_globals, exec_locals
+                )
+                # 计算最后的表达式
+                eval_tree = ast.Expression(body=last_node.value)
+                result_value = eval(
+                    compile(eval_tree, "<user_code>", "eval"), exec_globals, exec_locals
+                )
+            else:
+                # 全是语句
+                exec(compile(tree, "<user_code>", "exec"), exec_globals, exec_locals)
+                # 兼容你原有的逻辑：寻找 result 变量或最后一个局部变量
+                if "result" in exec_locals:
+                    result_value = exec_locals["result"]
+                elif exec_locals:
+                    result_value = exec_locals[list(exec_locals.keys())[-1]]
+
+        return {
+            "result": str(result_value) if result_value is not None else "None",
+            "stdout": stdout_capture.getvalue(),
+            "stderr": "",
+        }
+
+    except Exception:
+        # 3. 运行期错误：过滤掉 py_eval 自身的堆栈
+        etype, evalue, tb = sys.exc_info()
+        # 这里的 [1:] 是关键，它跳过了 py_eval 函数这一层的调用栈
+        fmt_exception = traceback.format_exception(etype, evalue, tb.tb_next)
+
+        return {
+            "result": "",
+            "stdout": stdout_capture.getvalue(),
+            "stderr": "".join(fmt_exception),
+        }
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
 def init_globals():
     global global_func_lists
@@ -1186,3 +1333,6 @@ class IDAFunctions:
         offset = params[1]
         limit = params[2]
         return {'results': find_bytes(patterns, offset, limit)}
+    
+    def py_eval(self, code: str) -> Dict:
+        return {"result": py_eval(code)}
