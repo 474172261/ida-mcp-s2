@@ -781,15 +781,24 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
         if not decl_str.endswith(';'):
             decl_str += ";"
             
-        tinfo = ida_typeinf.tinfo_t()
+        new_type = ida_typeinf.tinfo_t()
         # PT_TYP 表示解析的是类型声明
-        if ida_typeinf.parse_decl(tinfo, None, decl_str, 0):
+        if ida_typeinf.parse_decl(new_type, None, decl_str, 0):
             lvars = cfunc.get_lvars()
             for var in lvars:
                 if var.name == var_name:
-                    var.set_final_lvar_type(tinfo)
-                    cfunc.verify(True, True)
-                    applied_type = tinfo.dstr()
+                    if not var.accepts_type(new_type):
+                        success = False
+                        applied_type = "type is not accepted"
+                        break
+
+                    var.set_lvar_type(new_type)
+                    lsi = ida_hexrays.lvar_saved_info_t()
+                    lsi.ll = var
+                    lsi.type = new_type
+                    ida_hexrays.modify_user_lvar_info(func.start_ea, ida_hexrays.MLI_TYPE, lsi)
+                    applied_type = new_type.dstr()
+
                     success = True
                     break
         else:
