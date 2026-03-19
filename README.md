@@ -49,7 +49,7 @@ ida-mcp-s2/
 ### 启动服务器
 
 ```bash
-python main.py --db-dir /path/to/ida/databases --debug
+python main.py --db-dir /path/to/ida/databases --port 18888 --debug
 ```
 
 参数说明：
@@ -67,6 +67,20 @@ GET /mcp
 ```
 
 通过MCP客户端连接，使用标准MCP协议进行调用。
+
+**opencode 配置mcp client**
+在%USERPROFILE%\.config\opencode\opencode.jsonc`中, 添加如下信息:
+```
+{
+  "mcp": {
+    "my_ida-mcp":{
+      "type":"remote",
+      "url": "http://127.0.0.1:18888/mcp",
+      "enabled": true
+    },
+  }
+}
+```
 
 ### 可用方法
 
@@ -291,7 +305,7 @@ Worker: Exit
 
 ### 数据持久化
 
-默认情况下，工作进程会在退出时撤销所有对数据库的修改（通过IDA的undo功能）。如需保存修改，可以在创建Session时设置`persist_changes=True`。
+默认情况下，工作进程会在退出时撤销所有对数据库的修改（通过IDA的undo功能）。如需保存修改，可以在启动server时添加`--save_change` 参数
 
 ## 安全注意事项
 
@@ -316,12 +330,6 @@ logger.debug("Debug message")
 ```
 
 ## 故障排除
-
-### "Failed to import IDA modules"
-确保从IDA Python环境运行，或正确设置了IDA_PATH环境变量。
-
-### "Database not found"
-检查 `--db-dir` 参数指向的目录中是否包含 `.idb` 或 `.i64` 文件。
 
 ### 端口冲突
 如果8080端口被占用，使用 `--port` 参数指定其他端口。
