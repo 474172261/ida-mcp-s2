@@ -70,6 +70,8 @@ def test_function(func_name, func, *args, **kwargs):
     except Exception as e:
         print(e)
         print("!!!!!!!!!!!!!!!!!!!!!!!")
+        import traceback
+        traceback.print_exc()
         input('>')
         test_results['failed'] += 1
     test_results["passed"] += 1
@@ -96,33 +98,28 @@ def run_tests(functions:ida_functions.IDAFunctions):
     test_function(
         "list_funcs",
         functions.list_funcs,
-        offset = 0,
-        limit = 5
+        [0, 5, "*"]
     )
     
     # 2. 测试 list_funcs with filter
     test_function(
         "list_funcs (with filter)",
         functions.list_funcs,
-        offset = 0,
-        limit = 5,
-        contain = "Handle"
+        [0, 5, "Handle"]
     )
     
     # 3. 测试 list_globals
     status, result_globals = test_function(
         "list_globals",
         functions.list_globals,
-        offset = 0,
-        limit = 5
+        [0, 5, "*"]
     )
     print(result_globals)
     # 4. 测试 list_imports
     test_function(
         "list_imports",
         functions.list_imports,
-        offset = 0,
-        limit = 5
+        [0, 5, "*"]
     )
     
     # 5. 测试 lookup_funcs (by address)
@@ -205,6 +202,12 @@ def run_tests(functions:ida_functions.IDAFunctions):
             ['0x1800A21D8']
         )
     
+    test_function(
+            "search_in_strings_window",
+            functions.search_in_strings_window,
+            ['pszUnauthenticatedUserName', 0, 5]
+        )
+    
     # 13. 测试 get_global_value
     test_function(
         "get_global_value",
@@ -254,7 +257,7 @@ def run_tests(functions:ida_functions.IDAFunctions):
     test_function(
         "search_structs",
         functions.search_structs,
-        "Request", True
+        ["Request", True]
     )
 
     test_function(

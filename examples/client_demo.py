@@ -219,6 +219,19 @@ class IDAMCPClient:
             if item.type == "text":
                 return json.loads(item.text if item.text else "[]")
         return []
+    
+    async def search_in_strings_window(self, pattern: str, offset: int = 0, limit: int = 10) -> List[Dict]:
+        """读取字符串"""
+        if not self.session_id:
+            return []
+
+        content = await self._call_tool(
+            "search_in_strings_window", {"session_id": self.session_id, "pattern": pattern, 'offset': offset, 'limit': limit}
+        )
+        for item in content:
+            if item.type == "text":
+                return json.loads(item.text if item.text else "[]")
+        return []
 
     async def list_globals(
         self, offset: int = 0, limit: int = 10, filter_contains: str = ""
@@ -547,6 +560,11 @@ async def demo():
         # 16. 读取字符串
         print_section(f"16. Get String: {test_string_addr}")
         strings = await client.read_string([test_string_addr])
+        print_result("Strings", strings)
+
+        search_string = 'pszUnauthenticatedUserName'
+        print_section(f"16-1. search_in_strings_window {search_string}")
+        strings = await client.search_in_strings_window(search_string)
         print_result("Strings", strings)
 
         # 17. 获取全局变量值（通过地址）

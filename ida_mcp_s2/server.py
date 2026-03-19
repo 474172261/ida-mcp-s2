@@ -448,6 +448,17 @@ def read_string(session_id: str, addrs: List[str]) -> Dict[str, Any]:
 
 # MCP Tools - Globals and Imports
 
+@mcp.tool()
+def search_in_strings_window(session_id: str, pattern: str, offset: int = 0, limit: int = 10)-> Dict:
+    """ search strings with pattern
+    
+    Args:
+        pattern: regex
+        offset : Start offset for pagination
+        limit: Maximum number of results
+    """
+    return _call_ida_method(session_id, "search_in_strings_window", [pattern, offset, limit])
+
 
 @mcp.tool()
 def list_globals(

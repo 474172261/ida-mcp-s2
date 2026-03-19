@@ -18,29 +18,14 @@ import ida_bytes
 import ida_frame
 import re
 import ida_typeinf
+import ida_strlist
+from ida_mcp_s2.utils import get_wide_strings_manually, get_readble_name, debug_stop
 
 
 global_func_lists = []
 global_Nams_lists = []
 global_imports_lists = []
-# global_strings_lists = []
-
-def debug_stop():
-    import pdb
-    pdb.set_trace()
-
-def get_readble_name(func_ea):
-    name = idc.get_name(func_ea)
-    if not name:
-        func_name = idc.get_func_name(func_ea)
-        if not func_name:
-            clean_name = hex(func_ea)
-            return clean_name
-        name = func_name
-    clean_name = ida_name.demangle_name(name, 8)
-    if clean_name == None:
-        clean_name = name
-    return clean_name
+global_strings_lists = []
 
 def list_funcs(
     offset: int = 0,
@@ -485,19 +470,32 @@ def read_string(addrs: Union[str, List[str]]) -> List[Dict]:
 
     return results
 
-def search_in_strings_window(pattern: str) -> List[Dict]:
+def search_in_strings_window(pattern: str, offset = 0, limit = 10) -> List[Dict]:
     """
     在 IDA 的字符串列表中进行子串匹配
     """
-    s = idautils.Strings()
-    results = []
-    for string_item in s:
-        # 获取字符串内容
-        content = str(string_item)
-        if pattern in content:
-            results.append({'ea':string_item.ea, 'text':content})
-            
-    return results
+    global global_strings_lists
+    matches = []
+    regex = re.compile(pattern, re.IGNORECASE)
+
+    strings = global_strings_lists
+    skipped = 0
+    more = False
+    for ea, text in strings:
+        if regex.search(text):
+            if skipped < offset:
+                skipped += 1
+                continue
+            if len(matches) >= limit:
+                more = True
+                break
+            matches.append({"addr": hex(ea), "string": text})
+
+    return {
+        "n": len(matches),
+        "matches": matches,
+        "cursor": {"next": offset + limit} if more else {"done": True},
+    }
 
 def get_global_value(queries: Union[str, List[str]]) -> List[Dict]:
     """获取全局变量值 - 函数式实现"""
@@ -963,11 +961,13 @@ def undefine(items: List[Dict]) -> List[Dict]:
         results.append({"address": hex(addr), "success": success})
 
     return results
+    
 
 def init_globals():
     global global_func_lists
     global global_imports_lists
     global global_Nams_lists
+    global global_strings_lists
 
     for i in range(ida_funcs.get_func_qty()):
         func = ida_funcs.getn_func(i)
@@ -988,6 +988,12 @@ def init_globals():
             global_imports_lists.append((ea,name or f"ord_{ord}", module_name))
             return True
         ida_nalt.enum_import_names(i, imp_cb)
+
+    strings = idautils.Strings()
+    for string in strings:
+        global_strings_lists.append((string.ea, str(string)))
+    wide_strings = get_wide_strings_manually() # default string length is 5. only support ascii wide characters
+    global_strings_lists.extend(wide_strings)
     
 
 class IDAFunctions:
@@ -1042,6 +1048,12 @@ class IDAFunctions:
 
     def read_string(self, params: List[str]) -> Dict:
         return {"strings": read_string(params)}
+
+    def search_in_strings_window(self, params: List[str, int, int]) -> Dict:
+        pattern = params[0]
+        offset = params[1]
+        limit = params[2]
+        return {'results': search_in_strings_window(pattern, offset, limit)}
 
     def get_global_value(self, params: List[str]) -> Dict:
         return {"values": get_global_value(params)}
