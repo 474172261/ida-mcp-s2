@@ -30,6 +30,12 @@ sessions: Dict[str, "IDASession"] = {}
 session_lock = threading.Lock()
 db_dir: Path = Path(".")
 g_persist_changes = False
+g_id_nums = 0
+
+def get_session_id():
+    global g_id_nums
+    g_id_nums += 1
+    return 'sid_{:04x}'.format(g_id_nums)
 
 
 class IDASession:
@@ -311,7 +317,7 @@ def open_database(name: str) -> Dict[str, Any]:
         raise ValueError(f"Database not found: {name}")
 
     # Create new session
-    session_id = str(uuid.uuid4())
+    session_id = get_session_id()
     try:
         session = IDASession(session_id, str(db_path))
         with session_lock:
@@ -650,7 +656,11 @@ def set_lvar_type(
 
     Args:
         session_id: The session ID
-        items: List of {ea: str/int, var_name: str, struct_type: str, new_name: str}, new_name is optional
+        items: List of dict, [{'ea':str/int, 'var_name':str, 'struct_type':str, 'new_name':str}];
+            ea: str/int, function address or name;
+            var_name: str, variable name inside function;
+            struct_type: str, "structure type to variable";
+            new_name: str, this is optianl. the new name of variable
     """
     return _call_ida_method(session_id, "set_lvar_type", items)
 
