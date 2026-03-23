@@ -129,9 +129,9 @@ def run_tests(functions: ida_functions.IDAFunctions):
 
     test_function("disasm", functions.disasm, [func_name, 0, 0])
 
-    # 9. 测试 xrefs_to
+    # 9. 测试 xrefs_to_addr
     if func_addr:
-        test_function("xrefs_to", functions.xrefs_to, ["0x180079B7E"])
+        test_function("xrefs_to_addr", functions.xrefs_to_addr, ["0x180079B7E"])
     test_function(
         "xrefs_to_field",
         functions.xrefs_to_field,

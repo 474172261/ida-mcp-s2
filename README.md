@@ -96,7 +96,7 @@ GET /mcp
 - `disasm`: 反汇编函数
 
 #### 交叉引用
-- `xrefs_to`: 获取地址的交叉引用
+- `xrefs_to_addr`: 获取地址的交叉引用
 - `xrefs_to_field`: 获取结构体字段的交叉引用
 - `callees`: 获取函数调用的子函数
 
@@ -126,7 +126,7 @@ GET /mcp
 - `add_pseudocode_comment`: 添加反编译代码注释
 
 #### 类型操作
-- `set_lvar_type`: 设置伪c代码局部变量类型
+- `set_lvar_type`: 设置伪c代码局部变量类型和名称
 
 #### 修改操作
 - `define_func`: 定义函数

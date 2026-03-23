@@ -249,6 +249,16 @@ def _call_ida_method(session_id: str, method: str, params: List) -> Any:
 
 
 # MCP Tools - Database Management
+@mcp.tool()
+def list_sessions() -> Dict[str, Any]:
+    """List all active IDA database sessions"""
+    with session_lock:
+        session_list = {}
+        for session_id, session in sessions.items():
+            session_list[session_id] = {
+                "database": Path(session.db_path).name,
+            }
+        return {"sessions": session_list}
 
 
 @mcp.tool()
@@ -383,14 +393,14 @@ def disasm(session_id: str, addr: str, offset: int = 0, limit: int = 0) -> Dict:
 
 
 @mcp.tool()
-def xrefs_to(session_id: str, addrs: List[str]) -> Dict[str, Any]:
+def xrefs_to_addr(session_id: str, addrs: List[str]) -> Dict[str, Any]:
     """Get cross references to addresses
 
     Args:
         session_id: The session ID
         addrs: List of addresses to find references to. eg: Data address/name, code address, func name/address.
     """
-    return _call_ida_method(session_id, "xrefs_to", addrs)
+    return _call_ida_method(session_id, "xrefs_to_addr", addrs)
 
 
 @mcp.tool()

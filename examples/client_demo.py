@@ -167,13 +167,13 @@ class IDAMCPClient:
                 return item.text if item.text else ""
         return ""
 
-    async def xrefs_to(self, addrs: List[str]) -> List[Dict]:
+    async def xrefs_to_addr(self, addrs: List[str]) -> List[Dict]:
         """获取交叉引用"""
         if not self.session_id:
             return []
 
         content = await self._call_tool(
-            "xrefs_to", {"session_id": self.session_id, "addrs": addrs}
+            "xrefs_to_addr", {"session_id": self.session_id, "addrs": addrs}
         )
         for item in content:
             if item.type == "text":
@@ -624,7 +624,7 @@ async def demo():
         # 11. 获取交叉引用
         xref_addr = "0x180079B7E"
         print_section(f"11. Get Xrefs To: {xref_addr}")
-        xrefs = await client.xrefs_to([xref_addr])
+        xrefs = await client.xrefs_to_addr([xref_addr])
         print_result("Xrefs", xrefs)
 
         # 12. 获取结构体字段交叉引用

@@ -215,13 +215,13 @@ def decompile(addr_or_name: str, offset: int = 0, limit: int = 0) -> Dict:
     if limit:
         if len(string) > offset + limit:
             string = string[offset: offset+limit]
-            result = {'func_name': fname, 'addr': hex(addr), 'offset':offset, 'code':string, 'next': offset + limit}
+            result = {'func_name': fname, 'addr': hex(faddr), 'cur offset':offset, 'code':string, 'next offset to read': offset + limit}
         elif offset >= len(string):
             result = {'error':'offset is too big'}
         else:
-            result = {'func_name': fname, 'addr': hex(addr), 'offset':offset, 'code':string[offset:], 'done': True}
+            result = {'func_name': fname, 'addr': hex(faddr), 'cur offset':offset, 'code':string[offset:], 'finish': True}
     else:
-        result = {'func_name': fname, 'addr': hex(addr), 'code':string, 'done': True}
+        result = {'func_name': fname, 'addr': hex(faddr), 'code':string, 'finish': True}
     return result
 
 def disasm(addr_or_name: str, offset: int = 0, limit: int = 0) -> Dict:
@@ -272,7 +272,7 @@ def disasm(addr_or_name: str, offset: int = 0, limit: int = 0) -> Dict:
             result = {'err':'offset is two big'}
         else:
             output_string = ''.join(output)
-            result = {'codes': output_string, 'next': offset + limit}
+            result = {'codes': output_string, 'cur offset': offset, 'next offset to read': offset + limit}
 
     # 情况 B: 未找到函数，但有有效地址，反汇编接下来的 10 条指令
     elif addr is not None:
@@ -300,7 +300,7 @@ def disasm(addr_or_name: str, offset: int = 0, limit: int = 0) -> Dict:
     return result
 
 
-def xrefs_to(addrs: Union[str, List[str]]) -> List[Dict]:
+def xrefs_to_addr(addrs: Union[str, List[str]]) -> List[Dict]:
     """获取交叉引用 - 函数式实现"""
 
     if isinstance(addrs, str):
@@ -309,7 +309,11 @@ def xrefs_to(addrs: Union[str, List[str]]) -> List[Dict]:
     results = []
 
     for addr_str in addrs:
-        addr = int(addr_str, 0)
+        try:
+            addr = int(addr_str, 0)
+        except:
+            results.append(f'"{addr_str}" is not an address')
+            continue
 
         for xref in idautils.XrefsTo(addr):
             
@@ -1263,8 +1267,8 @@ class IDAFunctions:
         limit = params[2]
         return {"result": disasm(addr_or_name, offset, limit)}
 
-    def xrefs_to(self, addrs: List) -> Dict:
-        return {"xrefs": xrefs_to(addrs)}
+    def xrefs_to_addr(self, addrs: List) -> Dict:
+        return {"xrefs": xrefs_to_addr(addrs)}
 
     def xrefs_to_field(self, params: List[Dict]) -> Dict:
         return {"xrefs": xrefs_to_field(params)}
