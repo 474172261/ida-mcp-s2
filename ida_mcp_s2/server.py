@@ -50,30 +50,29 @@ class IDASession:
         self.db_path = db_path
         self.logger = get_logger()
         self.persist_changes = g_persist_changes
+        self.parent_sock = None
+        self.process = None
+        self._start_worker()
 
-        # Create two socket pairs: one for RPC, one for logs
+    def _start_worker(self):
+        """Start the worker process"""
         self.parent_sock, self.child_sock = socket.socketpair()
-        self.log_parent_sock, self.log_child_sock = socket.socketpair()
 
-        # Start worker process
         self.process = multiprocessing.Process(
             target=_ida_worker,
             args=(
                 self.child_sock,
-                self.log_child_sock,
-                db_path,
+                self.db_path,
                 self.persist_changes,
-                session_id,
-                self.logger.level
+                self.session_id,
+                self.logger.level,
             ),
         )
         self.process.start()
 
-        # Close child sockets in parent
         self.child_sock.close()
-        self.log_child_sock.close()
 
-        self.logger.info(f"Started IDA worker process for session {session_id}")
+        self.logger.info(f"Started IDA worker process for session {self.session_id}")
 
     def call(self, method: str, params: Dict) -> Dict:
         """调用IDA工作进程"""
@@ -82,12 +81,19 @@ class IDASession:
         response_data = self._recv_message(self.parent_sock)
         return response_data
 
-    def close(self):
-        """关闭会话"""
+    def close(self, save: Optional[bool] = None):
+        """关闭会话
+
+        Args:
+            save: 可选参数，指定是否保存变更。如果提供，会覆盖 worker 启动时的默认设置
+        """
         self.logger.info(f"Try to close session {self.session_id}")
 
         try:
-            self._send_message(self.parent_sock, {"method": "shutdown"})
+            message = {"method": "shutdown"}
+            if save is not None:
+                message["params"] = {"save": save}
+            self._send_message(self.parent_sock, message)
         except:
             pass
 
@@ -101,10 +107,17 @@ class IDASession:
             self.process.join(timeout=5)
 
         self.parent_sock.close()
-        if hasattr(self, "log_parent_sock"):
-            self.log_parent_sock.close()
 
         self.logger.info(f"Closed session {self.session_id}")
+
+    def reload(self, save_changes: bool = False):
+        """重新载入 IDA worker 进程，保持 session_id 不变
+
+        Args:
+            save_changes: 重载前是否保存当前的数据库修改
+        """
+        self.close(save=save_changes)
+        self._start_worker()
 
     def _send_message(self, sock: socket.socket, data: dict):
         """发送消息（带长度前缀）"""
@@ -133,11 +146,10 @@ class IDASession:
 
 def _ida_worker(
     rpc_sock: socket.socket,
-    log_sock: socket.socket,
     db_path: str,
     persist_changes: bool,
     session_id: str,
-    log_level: bool
+    log_level: bool,
 ):
     """
     IDA工作进程
@@ -184,7 +196,10 @@ def _ida_worker(
                 params = request.get("params", {})
 
                 if method == "shutdown":
-                    logger.info("Received shutdown command")
+                    save = params.get("save")
+                    if save is not None:
+                        persist_changes = save
+                    logger.info(f"Received shutdown command (save={persist_changes})")
                     break
 
                 handler = getattr(ida_funcs, method, None)
@@ -224,7 +239,6 @@ def _ida_worker(
         logger.error(f"Worker error: {e}")
     finally:
         rpc_sock.close()
-        log_sock.close()
         logger.info("IDA worker terminated")
 
 
@@ -245,7 +259,7 @@ def _call_ida_method(session_id: str, method: str, params: List) -> Any:
         return {"error": "Session not found"}
 
     logger = get_logger()
-    logger.debug("call ida function: "+method+' '+str(params))
+    logger.debug("call ida function: " + method + " " + str(params))
     result = session.call(method, params)
     if result.get("success"):
         logger.debug("call ida function result: " + str(result.get("data")))
@@ -333,11 +347,12 @@ def open_database(name: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def close_database(session_id: str) -> Dict[str, Any]:
+def close_database(session_id: str, save_changes: bool = False) -> Dict[str, Any]:
     """Close an IDA database session
 
     Args:
         session_id: The session ID returned by open_database
+        save_changes: 是否在关闭前保存数据库修改（默认 False）
     """
     session = _get_session(session_id)
     if not session:
@@ -347,8 +362,24 @@ def close_database(session_id: str) -> Dict[str, Any]:
         if session_id in sessions:
             del sessions[session_id]
 
-    session.close()
+    session.close(save=save_changes)
     return {"closed": True}
+
+
+@mcp.tool()
+def reload_database(session_id: str, save_changes: bool = False) -> Dict[str, Any]:
+    """重新载入 IDA worker 进程，保持 session_id 不变
+
+    Args:
+        session_id: 会话 ID
+        save_changes: 重载前是否保存当前的数据库修改
+    """
+    session = _get_session(session_id)
+    if not session:
+        raise ValueError("未找到会话")
+
+    session.reload(save_changes)
+    return {"reloaded": True, "session_id": session_id}
 
 
 @mcp.tool()
