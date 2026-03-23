@@ -287,6 +287,16 @@ def open_database(name: str) -> Dict[str, Any]:
     if "/" in name or "\\" in name or ".." in name:
         raise ValueError("Invalid database name")
 
+    with session_lock:
+        for session_id, session in sessions.items():
+            if Path(session.db_path).name == name:
+                logger.info(f"already opened {name}")
+                return  {
+                    "session_id": session_id,
+                    "database": Path(session.db_path).name,
+                    "path": session.db_path,
+                }
+
     # Check if database exists
     db_path = db_dir / name
     if not db_path.exists():
