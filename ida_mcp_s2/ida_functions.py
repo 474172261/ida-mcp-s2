@@ -811,25 +811,25 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
         # 1. 获取函数
         func = ida_funcs.get_func(ea)
         if not func:
-            results.append({"ea": hex(ea), "var": var_name, "success": False, "msg": "Function not found"})
+            results.append({"ea": hex(ea), "var": var_name, "status": "Fail", "msg": "Function not found"})
             continue
 
         # 2. 反编译
         cfunc = ida_hexrays.decompile(func.start_ea)
         if not cfunc:
-            results.append({"ea": hex(ea), "var": var_name, "success": False, "msg": "Decompilation failed"})
+            results.append({"ea": hex(ea), "var": var_name, "status": "Fail", "msg": "Decompilation failed"})
             continue
         
         if new_name:
             if not ida_hexrays.rename_lvar(ea, var_name, new_name):
-                results.append({"ea": hex(ea), "var": var_name, "success": False, "msg": "rename fail"})
+                results.append({"ea": hex(ea), "var": var_name, "status": "Fail", "msg": "rename fail"})
                 continue
 
         # 3. 构造 tinfo_t 类型
         # 确保以分号结尾以符合 parse_decl 规范
         decl_str = struct_type.strip()
         if not decl_str.endswith(';'):
-            decl_str += ";"
+            decl_str += " dummy;"
             
         new_type = ida_typeinf.tinfo_t()
         # PT_TYP 表示解析的是类型声明
@@ -840,17 +840,13 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
                 if lvar.name == var_name:
                     var = lvar
             if var:
-                if not var.accepts_type(new_type):
-                    success = False
-                    msg = "type is not accepted"
-                else:
                     # var.set_lvar_type(new_type)
                     lsi = ida_hexrays.lvar_saved_info_t()
                     lsi.ll = var
                     lsi.type = new_type
                     ida_hexrays.modify_user_lvar_info(func.start_ea, ida_hexrays.MLI_TYPE, lsi)
                     msg = 'type now is:'+ new_type.dstr()
-                    success = True
+                    success = "OK"
             else:
                 msg = f"can't find var name:{var_name}"
 
@@ -861,7 +857,7 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
             "ea": hex(ea), 
             "var": var_name, 
             "msg": msg, 
-            "success": success
+            "status": success
         })
 
     return results
