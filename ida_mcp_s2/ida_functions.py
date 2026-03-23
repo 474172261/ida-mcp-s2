@@ -803,28 +803,29 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
         ea_raw = item.get('ea')
         ea = int(ea_raw, 0) if isinstance(ea_raw, str) else ea_raw
         var_name = item.get('var_name')
-        struct_type = item.get('struct_type')
+        struct_type = item.get('struct_type', None)
         new_name = item.get('new_name', None)
         
-        success = False
+        success = 'Fail'
         
         # 1. 获取函数
         func = ida_funcs.get_func(ea)
         if not func:
-            results.append({"ea": hex(ea), "var": var_name, "status": "Fail", "msg": "Function not found"})
+            results.append({"ea": hex(ea), "var": var_name, "status": success, "msg": "Function not found"})
             continue
 
         # 2. 反编译
         cfunc = ida_hexrays.decompile(func.start_ea)
         if not cfunc:
-            results.append({"ea": hex(ea), "var": var_name, "status": "Fail", "msg": "Decompilation failed"})
+            results.append({"ea": hex(ea), "var": var_name, "status": success, "msg": "Decompilation failed"})
             continue
-        
         if new_name:
             if not ida_hexrays.rename_lvar(ea, var_name, new_name):
-                results.append({"ea": hex(ea), "var": var_name, "status": "Fail", "msg": "rename fail"})
+                results.append({"ea": hex(ea), "var": var_name, "status": success, "msg": "rename fail"})
                 continue
-
+            if not struct_type:
+                results.append({"ea": hex(ea), "var": var_name, 'new_name': new_name, "status": "OK"})
+                continue
         # 3. 构造 tinfo_t 类型
         # 确保以分号结尾以符合 parse_decl 规范
         decl_str = struct_type.strip()
@@ -845,20 +846,28 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
                     lsi.ll = var
                     lsi.type = new_type
                     ida_hexrays.modify_user_lvar_info(func.start_ea, ida_hexrays.MLI_TYPE, lsi)
-                    msg = 'type now is:'+ new_type.dstr()
+                    msg = 'type now is: '+ new_type.dstr()
                     success = "OK"
             else:
                 msg = f"can't find var name:{var_name}"
 
         else:
             msg = "parse c defination fail"
-
-        results.append({
-            "ea": hex(ea), 
-            "var": var_name, 
-            "msg": msg, 
-            "status": success
-        })
+        if new_name:
+            results.append({
+                "ea": hex(ea), 
+                "var": var_name, 
+                "new_name": new_name,
+                "msg": msg, 
+                "status": success
+            })
+        else:
+            results.append({
+                "ea": hex(ea), 
+                "var": var_name, 
+                "msg": msg, 
+                "status": success
+            })
 
     return results
 
