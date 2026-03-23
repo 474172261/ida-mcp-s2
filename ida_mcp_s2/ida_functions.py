@@ -821,7 +821,7 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
             continue
         if new_name:
             if not ida_hexrays.rename_lvar(ea, var_name, new_name):
-                results.append({"ea": hex(ea), "var": var_name, "status": success, "msg": "rename fail"})
+                results.append({"ea": hex(ea), "var": var_name, "status": success, "msg": "rename fail, maybe auto updated or new_name invalid"})
                 continue
             if not struct_type:
                 results.append({"ea": hex(ea), "var": var_name, 'new_name': new_name, "status": "OK"})
@@ -889,20 +889,22 @@ def set_comments_at_disassembly(items: List[Dict]) -> List[Dict]:
 
 def add_pseudocode_comment(params: List[Dict]) -> List[Dict]:
     # 1. 获取该地址所属的函数并反编译
+    results = []
     for param in params:
         ea = int(param.get('ea'), 0) if isinstance(param.get('ea'), str) else param.get('ea')
         comment_text = param.get('text')
         is_block = True if param.get('flag') == 'block' else False
-        results = []
 
         cfunc = ida_hexrays.decompile(ea)
         if not cfunc:
-            return False
+            results.append({"addr": hex(ea), "msg":"can't get decompile at ea"})
+            continue
 
         # 2. 获取该地址对应的 ctree 节点 (citem_t)
         item = cfunc.body.find_closest_addr(ea)
         if not item:
-            return False
+            results.append({"addr": hex(ea), "msg":"can't get decompile at ea"})
+            continue
 
         # ida_hexrays.ITP_SEMI (行末注释) 或 ida_hexrays.ITP_BLOCK (块注释)
         tl = ida_hexrays.ITP_BLOCK1 if is_block else ida_hexrays.ITP_SEMI

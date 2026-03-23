@@ -669,7 +669,7 @@ def add_pseudocode_comment(
         params: ['ea':xx,'text':xx,'flag':block or semi]
             ea: Address in the function
             text: Comment text
-            flag: Comment type ('block' or 'semi')
+            flag: Comment type ('block' or 'semi', use 'block' unless user specific)
     """
     return _call_ida_method(
         session_id, "add_pseudocode_comment", params
