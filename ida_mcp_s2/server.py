@@ -582,15 +582,16 @@ def search_structs(session_id: str, pattern_str: str, ignore_case: bool = True) 
 
 
 @mcp.tool()
-def create_struct_from_c(session_id: str, declarations: List[str]) -> Dict[str, Any]:
+def create_struct_from_c(session_id: str, declarations: List[str], is_update: bool = False) -> Dict[str, Any]:
     """Create structures from C declarations
 
     Args:
         session_id: The session ID
         declarations: List of C structure declarations
+        is_update: if set True, override existing structs
     """
     return _call_ida_method(
-        session_id, "create_struct_from_c", declarations
+        session_id, "create_struct_from_c", [declarations, is_update]
     )
 
 

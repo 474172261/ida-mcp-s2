@@ -391,14 +391,14 @@ class IDAMCPClient:
                 return json.loads(item.text if item.text else "[]")
         return []
 
-    async def create_struct_from_c(self, declarations: List[str]) -> List[Dict]:
+    async def create_struct_from_c(self, declarations: List[str], is_update: bool = False) -> List[Dict]:
         """从C声明创建结构体"""
         if not self.session_id:
             return []
 
         content = await self._call_tool(
             "create_struct_from_c",
-            {"session_id": self.session_id, "declarations": declarations},
+            {"session_id": self.session_id, "declarations": declarations, 'is_update': is_update},
         )
         for item in content:
             if item.type == "text":

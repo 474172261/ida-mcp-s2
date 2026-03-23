@@ -914,43 +914,52 @@ def add_pseudocode_comment(params: List[Dict]) -> List[Dict]:
         results.append({"addr": hex(ea), "success": True})
     return results
 
-def create_struct_from_c(params:List[str]) -> List[Dict]:
+def create_struct_from_c(queries: List[str], is_update: bool = False) -> List[Dict]:
     """
-    通过 C 语言声明创建结构体
-    :param c_declaration: C 语言结构体字符串，例如 "struct MyData { int a; char b[10]; };"
+    通过 IDA 内置的 C 解析器直接解析并创建结构体，无需正则。
+    :queries: 包含 C 语言结构体字符串的列表
+    :is_update bool: 是否覆盖已经存在的结构体.
     """
     results = []
-    for c_declaration in params:
-        type_name = ""
+    for c_declaration in queries:
+        # 1. 调用 idc.parse_decl 单步解析，它的返回值是一个元组 (name, type, fields)
+        # flags = 1 代表 PT_TYP (类型解析)
+        res = idc.parse_decl(c_declaration, idc.PT_TYP) 
         
-        # 情况 A: 匹配 typedef struct { ... } Name;
-        typedef_match = re.search(r'}\s*([a-zA-Z0-9_]+)\s*;', c_declaration)
-        # 情况 B: 匹配 struct Name { ... };
-        struct_match = re.search(r'struct\s+([a-zA-Z0-9_]+)\s*\{', c_declaration)
-        
-        if typedef_match:
-            type_name = typedef_match.group(1)
-        elif struct_match:
-            type_name = struct_match.group(1)
-        else:
-            # 兜底：取最后一个分号前的单词
-            type_name = c_declaration.strip().rstrip(';').split()[-1]
-        sid = idc.get_struc_id(type_name)
-        if sid != idc.BADADDR:
-            results.append({'name':type_name, "status": "already exist"})
+        if not res or not res[0]:
+            results.append({'name': 'unknown', "status": "IDA parse failed or anonymous struct"})
             continue
-        if idc.parse_decls(c_declaration, 0) != 0:
-            raise ValueError("C 语法解析失败")
+            
+        type_name = res[0] # 获取 IDA 解析出来的顶级结构体名称
+        if not is_update:
+            # 1. 检查是否作为结构体存在
+            sid = idc.get_struc_id(type_name)
 
-        # 3. 同步到 Structures 窗口
-        # 注意：如果是 'struct new12'，import_type 内部会自动处理前缀
+            # 2. 检查是否作为枚举存在 (核心修改点)
+            eid = idc.get_enum(type_name)
+
+            if sid != idc.BADADDR:
+                results.append({'name': type_name, "type": "struct", "status": "already exist"})
+                continue
+            elif eid != idc.BADADDR:
+                results.append({'name': type_name, "type": "enum", "status": "already exist"})
+                continue
+
+
+        # 2. 调用 idc.parse_decls 将整段声明真正加入到 Local Types 中
+        if idc.parse_decls(c_declaration, 0) != 0:
+            results.append({'name': type_name, "status": "Failed to add to Local Types"})
+            continue
+
         sid = idc.import_type(-1, type_name)
         
         if sid != idc.BADADDR:
-            results.append({'name':type_name, "status": "ok"})
+            results.append({'name': type_name, "status": "ok"})
         else:
-            results.append({'name':type_name, "status": "can't import, name invalid"})
+            results.append({'name': type_name, "status": "can't import, name invalid"})
+            
     return results
+
 
 
 def define_func(items: List[Dict]) -> List[Dict]:
@@ -1323,8 +1332,10 @@ class IDAFunctions:
     def undefine(self, params: List) -> Dict:
         return {"results": undefine(params)}
     
-    def create_struct_from_c(self, params: List[str]) -> Dict:
-        return {'results': create_struct_from_c(params)}
+    def create_struct_from_c(self, params: List) -> Dict:
+        queries = params[0]
+        flag = params[1]
+        return {'results': create_struct_from_c(queries, flag)}
     
     def add_pseudocode_comment(self, params: List[Dict]) -> Dict:
         return {'results': add_pseudocode_comment(params)}

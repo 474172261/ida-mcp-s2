@@ -211,7 +211,7 @@ def run_tests(functions: ida_functions.IDAFunctions):
     test_function(
         "create_struct_from_c",
         functions.create_struct_from_c,
-        ["struct MyTestStruc3 { int a; float b; };"],
+        ["struct MyTestStruc3 { int a; float b; };", False],
     )
 
     test_function("define_code", functions.define_code, [{"addr": func_addr}])
