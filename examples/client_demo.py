@@ -4,7 +4,6 @@ IDA MCP Client 示例
 基于 FastMCP HTTP transport
 """
 
-import requests
 import json
 import sys
 import uuid
