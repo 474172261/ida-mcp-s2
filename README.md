@@ -8,15 +8,31 @@
 - **多进程架构**: 每个IDA数据库在独立的进程中打开，支持同时处理多个数据库
 - **Session管理**: 客户端可以打开、管理和关闭数据库会话
 - **安全防护**: 数据库名称验证，防止路径穿越攻击
-- **优雅退出**: Ctrl+C信号处理，正确关闭所有子进程
+- **优雅退出**: server有Ctrl+C信号处理，正确关闭所有子进程
+- **实时保存改动, 实时优化接口实现**: reload_database(save_changes = True)接口, 可以保存更新并重新打开数据库, mcp server的worker进程也会重新加载 ida_functions.py, session_id维持不变. 在ida_functions.py有bug时, 可以实时修复ida_functions.py 的实现而不打断大模型的对话, 避免浪费上下文的token.
+
+## 项目结构
+
+```
+ida-mcp-s2/
+├── main.py                 # 服务入口
+├── ida_mcp_s2/
+│   ├── server.py           # MCP服务实现
+│   ├── ida_functions.py    # IDA功能封装
+│   └── logger.py           # 日志模块
+├── examples/
+│   └── client_demo.py      # MCP客户端测试示例
+└── tests/
+    └── test_ida_functions.py # 测试 ida_functions 功能
+```
 
 ## 安装
 
 ### 前提条件
 
 1. 安装IDA Pro 8.4或更高版本
-2. 参考 [idalib介绍](https://docs.hex-rays.com/user-guide/idalib), 安装它. 确保在python中可以`import idapro`
-3. Python 3.8+
+2. 安装 idalib. `pip install idapro`
+3. python 3.10+
 
 ### 设置
 
@@ -29,27 +45,21 @@ cd ida-mcp-s2
 pip install -r requirements.txt
 ```
 
-## 项目结构
-
-```
-ida-mcp-s2/
-├── main.py                 # 服务入口
-├── ida_mcp_s2/
-│   ├── server.py           # MCP服务实现
-│   ├── ida_functions.py    # IDA功能封装
-│   └── logger.py           # 日志模块
-├── examples/
-│   └── client_demo.py      # 客户端示例
-└── tests/
-    └── test_ida_functions.py
-```
-
 ## 使用方法
 
 ### 启动服务器
 
 ```bash
-python main.py --db-dir /path/to/ida/databases --port 18888 --debug
+> python main.py --db-dir E:\db_dir\ --port 18888 --debug
+
+Loading IDA library from: C:\Program Files\IDA Professional 9.1\idalib.dll
+2026-03-24 14:58:58 - ida_mcp_s1 - INFO - Starting IDA MCP Server on 0.0.0.0:18888
+2026-03-24 14:58:58 - ida_mcp_s1 - INFO - Database directory: E:\db_dir
+INFO:     Started server process [3388]
+INFO:     Waiting for application startup.
+[03/24/26 14:58:59] INFO     StreamableHTTP session manager started                                                                                                             streamable_http_manager.py:116
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:18888 (Press CTRL+C to quit)
 ```
 
 参数说明：
@@ -59,8 +69,53 @@ python main.py --db-dir /path/to/ida/databases --port 18888 --debug
 - `--debug`: 启用调试日志
 - `--save_change`: 默认不存储对ida数据库的改动, 添加此参数可保存改动（可选）
 
+### 测试连接
+```bash
+> python .\examples\client_demo.py
+http://127.0.0.1:18888/mcp
+MCP session established and initialized.
 
-### MCP端点
+======================================================================
+  IDA MCP Client Demo - 完整功能测试
+======================================================================
+name:list_sessions
+descrition:List all active IDA database sessions
+name:list_databases
+descrition:List available IDA database files
+name:open_database
+descrition:Open an IDA database
+
+Args:
+    name: Database file name (with or without extension)
+
+......
+
+======================================================================
+  1. List Databases
+======================================================================
+[TextContent(type='text', text='{\n  "databases": {\n    "aaedge-26252.5000.dll-new.i64": {\n      "size": 13741838,\n      "modified": 1774331558.1508806\n    }\n  }\n}', annotations=None, meta=None)]
+
+Databases:
+{
+  "databases": {
+    "aaedge-26252.5000.dll-new.i64": {
+      "size": 13741838,
+      "modified": 1774331558.1508806
+    }
+  }
+}
+
+======================================================================
+  2. Open Database: aaedge-26252.5000.dll-new.i64
+======================================================================
+[TextContent(type='text', text='{\n  "session_id": "sid_0001",\n  "database": "aaedge-26252.5000.dll-new.i64",\n  "path": "E:\\\\db_dir\\\\aaedge-26252.5000.dll-new.i64"\n}', annotations=None, meta=None)]
+Opened database: aaedge-26252.5000.dll-new.i64
+Session ID: sid_0001
+......
+```
+如上所示, 表明mcp的server正常运行, client成功连接并输出了mcp提供的工具描述, 测试了打开数据库功能正常.(client_demo里的后续mcp工具调用参数都基于我的数据库, 所以你的环境不一定正常输出，可能存在报错，是正常现象)
+
+### 配置Client的mcp
 
 ```
 GET /mcp
@@ -82,12 +137,16 @@ GET /mcp
 }
 ```
 
-### 可用方法
+**claude code 配置 mcp client**
+`claude mcp add ida-mcp-s2 --transport http http://127.0.0.1:18888/mcp`
+
+## 可用方法
 
 #### 数据库管理
 - `open_database`: 打开IDA数据库
 - `close_database`: 关闭数据库会话
 - `list_databases`: 列出可用数据库
+- `reload_database`: 重新打开数据库
 
 #### 函数操作
 - `list_funcs`: 列出函数（支持分页和过滤）
@@ -139,9 +198,9 @@ GET /mcp
 #### 代码执行
 - `py_eval`: 在IDA上下文中执行Python代码
 
-### 使用示例
+## http请求示例
 
-#### 1. 打开数据库
+### 1. 打开数据库
 
 ```bash
 curl -X POST http://localhost:8080/mcp \
@@ -170,7 +229,7 @@ curl -X POST http://localhost:8080/mcp \
 }
 ```
 
-#### 2. 列出函数
+### 2. 列出函数
 
 ```bash
 curl -X POST http://localhost:8080/mcp \
@@ -190,7 +249,7 @@ curl -X POST http://localhost:8080/mcp \
   }'
 ```
 
-#### 3. 反编译函数
+### 3. 反编译函数
 
 ```bash
 curl -X POST http://localhost:8080/mcp \
@@ -208,7 +267,7 @@ curl -X POST http://localhost:8080/mcp \
   }'
 ```
 
-#### 4. 获取全局变量
+### 4. 获取全局变量
 
 ```bash
 curl -X POST http://localhost:8080/mcp \
@@ -226,44 +285,9 @@ curl -X POST http://localhost:8080/mcp \
   }'
 ```
 
-### 使用MCP客户端库
+## 使用MCP客户端库
 
-```python
-from mcp import ClientSession, StdioServerParameters
-import subprocess
-
-# 启动IDA MCP服务器
-server_process = subprocess.Popen(
-    ["python", "main.py", "--db-dir", "./databases"],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-)
-
-# 连接MCP服务器
-params = StdioServerParameters(
-    command="python",
-    args=["main.py", "--db-dir", "./databases"],
-)
-
-async def main():
-    async with ClientSession(params) as session:
-        await session.initialize()
-        
-        # 打开数据库
-        result = await session.call_tool("open_database", {"name": "example.idb"})
-        session_id = result["session_id"]
-        
-        # 列出函数
-        funcs = await session.call_tool("list_funcs", {
-            "session_id": session_id,
-            "limit": 10
-        })
-        
-        print(funcs)
-
-import asyncio
-asyncio.run(main())
-```
+参考 example\client_demo.py 的实现
 
 ## 架构说明
 
@@ -305,13 +329,7 @@ Worker: Exit
 
 ### 数据持久化
 
-默认情况下，工作进程会在退出时撤销所有对数据库的修改（通过IDA的undo功能）。如需保存修改，可以在启动server时添加`--save_change` 参数
-
-## 安全注意事项
-
-1. **路径验证**: 数据库名称只能是文件名，不能包含路径分隔符或`..`
-2. **文件系统隔离**: 所有数据库必须从指定的`--db-dir`目录加载
-3. **进程隔离**: 每个数据库在独立进程中打开，崩溃不会影响其他会话
+默认情况下，工作进程会在退出时撤销所有对数据库的修改（通过IDA的undo功能）。如默认需保存修改，可以在启动server时添加`--save_change` 参数。如果只是临时想保存修改，在AI的对话窗口主动要求 “调用reload_database(save_changes = True)接口“，那么改动就会被保存，worker会重新启动并保持session_id不变。
 
 ## 日志
 

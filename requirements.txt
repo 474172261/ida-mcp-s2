@@ -4,8 +4,7 @@
 # Note: idalib is provided by IDA Pro installation and not available via pip
 mcp>=1.6.0
 fastmcp>=3.0.0
-requests>=2.28.0
-
+idapro>=0.0.2
 # Optional dependencies for enhanced functionality
 # Uncomment if needed
 # capstone>=4.0.2  # Alternative disassembly engine
