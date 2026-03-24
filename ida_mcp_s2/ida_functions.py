@@ -1302,7 +1302,7 @@ class IDAFunctions:
     def read_string(self, params: List[str]) -> Dict:
         return {"strings": read_string(params)}
 
-    def search_in_strings_window(self, params: List[str, int, int]) -> Dict:
+    def search_in_strings_window(self, params: Tuple[str, int, int]) -> Dict:
         pattern = params[0]
         offset = params[1]
         limit = params[2]
@@ -1351,7 +1351,7 @@ class IDAFunctions:
     def set_lvar_type(self, params: Dict) -> Dict:
         return {'results': set_lvar_type(params)}
     
-    def find_bytes(self, params: List) -> Dict:
+    def find_bytes(self, params: Tuple[str, int, int]) -> Dict:
         patterns = params[0]
         offset = params[1]
         limit = params[2]
