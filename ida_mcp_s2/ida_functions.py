@@ -28,6 +28,7 @@ import ida_entry
 import ida_kernwin
 import ida_lines
 import ida_segment
+import traceback
 from ida_mcp_s2.utils import get_wide_strings_manually, get_readble_name, debug_stop
 
 
