@@ -236,7 +236,9 @@ def _ida_worker(
         logger.error(f"Failed to import IDA modules: {e}")
         logger.error("Make sure this script is run from within IDA environment")
     except Exception as e:
-        logger.error(f"Worker error: {e}")
+        import traceback
+        error_info = traceback.format_exc()
+        logger.error(error_info)
     finally:
         rpc_sock.close()
         logger.info("IDA worker terminated")
