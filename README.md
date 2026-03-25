@@ -149,8 +149,8 @@ GET /mcp
 - `reload_database`: 重新打开数据库
 
 #### 函数操作
-- `list_funcs`: 列出函数（支持分页和过滤）
-- `lookup_funcs`: 按地址或名称查找函数
+- `list_funcs`: 列出函数（支持分页、过滤和正则表达式）
+- `get_func_by_addr`: 获取某个地址所属的函数信息
 - `decompile`: 反编译函数
 - `disasm`: 反汇编函数
 
@@ -241,9 +241,9 @@ curl -X POST http://localhost:8080/mcp \
       "name": "list_funcs",
       "arguments": {
         "session_id": "550e8400-e29b-41d4-a716-446655440000",
-        "offset": 0,
-        "limit": 10,
-        "contain": "main"
+        "queries": [
+          [0, 100, ""]
+        ]
       }
     }
   }'

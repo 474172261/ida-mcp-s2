@@ -95,7 +95,7 @@ class IDAMCPClient:
             return False
 
     async def list_funcs(
-        self, offset: int = 0, limit: int = 10, contain: Optional[str] = "*"
+        self, queries: Optional[List[Tuple[int, int, str]]] = None
     ) -> Dict:
         """列出函数"""
         if not self.session_id:
@@ -103,25 +103,20 @@ class IDAMCPClient:
 
         content = await self._call_tool(
             "list_funcs",
-            {
-                "session_id": self.session_id,
-                "offset": offset,
-                "limit": limit,
-                "contain": contain,
-            },
+            {"session_id": self.session_id, "queries": queries},
         )
         for item in content:
             if item.type == "text":
                 return json.loads(item.text if item.text else "{}")
         return {}
 
-    async def lookup_funcs(self, queries: List[str]) -> Dict:
+    async def get_func_by_addr(self, queries: List[str]) -> Dict:
         """查找函数"""
         if not self.session_id:
             return {"error": "No active session"}
 
         content = await self._call_tool(
-            "lookup_funcs", {"session_id": self.session_id, "queries": queries}
+            "get_func_by_addr", {"session_id": self.session_id, "queries": queries}
         )
         for item in content:
             if item.type == "text":
@@ -266,15 +261,18 @@ class IDAMCPClient:
         return []
 
     async def list_globals(
-        self, offset: int = 0, limit: int = 10, filter_contains: str = ""
+        self, offset: int = 0, limit: int = 10, contain: str = "*"
     ) -> List[Dict]:
         """列出全局变量"""
         if not self.session_id:
             return []
 
-        params = {"session_id": self.session_id, "offset": offset, "limit": limit}
-        if filter_contains:
-            params["filter_contains"] = filter_contains
+        params = {
+            "session_id": self.session_id,
+            "offset": offset,
+            "limit": limit,
+            "contain": contain,
+        }
 
         content = await self._call_tool("list_globals", params)
         for item in content:
@@ -390,14 +388,20 @@ class IDAMCPClient:
                 return json.loads(item.text if item.text else "[]")
         return []
 
-    async def create_struct_from_c(self, declarations: List[str], is_update: bool = False) -> List[Dict]:
+    async def create_struct_from_c(
+        self, declarations: List[str], is_update: bool = False
+    ) -> List[Dict]:
         """从C声明创建结构体"""
         if not self.session_id:
             return []
 
         content = await self._call_tool(
             "create_struct_from_c",
-            {"session_id": self.session_id, "declarations": declarations, 'is_update': is_update},
+            {
+                "session_id": self.session_id,
+                "declarations": declarations,
+                "is_update": is_update,
+            },
         )
         for item in content:
             if item.type == "text":
@@ -570,12 +574,12 @@ async def demo():
 
         # 3. 列出函数
         print_section("3. List Functions (first 5)")
-        funcs = await client.list_funcs(offset=0, limit=5)
+        funcs = await client.list_funcs()
         print_result("Functions", funcs)
 
         # 4. 列出函数（带过滤）
-        print_section("4. List Functions with contain 'Handle'")
-        funcs_filtered = await client.list_funcs(offset=0, limit=5, contain="Handle")
+        print_section("4. List Functions with contain 'Handle.*Completion'")
+        funcs_filtered = await client.list_funcs([(0, 0, "Handle.*Completion")])
         print_result("Filtered Functions", funcs_filtered)
 
         # 5. 列出全局变量
@@ -590,12 +594,12 @@ async def demo():
 
         # 7. 查找函数（通过地址）
         print_section(f"7. Lookup Function by Address: {func_addr}")
-        lookup_addr = await client.lookup_funcs([func_addr])
+        lookup_addr = await client.get_func_by_addr([func_addr])
         print_result("Lookup Result", lookup_addr)
 
         # 8. 查找函数（通过名称）
         print_section(f"8. Lookup Function by Name: {func_name}")
-        lookup_name = await client.lookup_funcs([func_name])
+        lookup_name = await client.get_func_by_addr([func_name])
         print_result("Lookup Result", lookup_name)
 
         # 9. 反编译函数

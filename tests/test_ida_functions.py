@@ -92,10 +92,12 @@ def run_tests(functions: ida_functions.IDAFunctions):
     func_addr = "0x180077C14"
 
     # 1. 测试 list_funcs
-    test_function("list_funcs", functions.list_funcs, [0, 5, "*"])
+    test_function("list_funcs", functions.list_funcs, [(0, 0, "")])
 
     # 2. 测试 list_funcs with filter
-    test_function("list_funcs (with filter)", functions.list_funcs, [0, 5, "Handle"])
+    test_function(
+        "list_funcs (with filter)", functions.list_funcs, [(0, 0, "Handle.*Completion")]
+    )
 
     # 3. 测试 list_globals
     status, result_globals = test_function(
@@ -105,13 +107,17 @@ def run_tests(functions: ida_functions.IDAFunctions):
     # 4. 测试 list_imports
     test_function("list_imports", functions.list_imports, [0, 5, "*"])
 
-    # 5. 测试 lookup_funcs (by address)
+    # 5. 测试 get_func_by_addr (by address)
     if func_addr:
-        test_function("lookup_funcs (by address)", functions.lookup_funcs, [func_addr])
+        test_function(
+            "get_func_by_addr (by address)", functions.get_func_by_addr, [func_addr]
+        )
 
-    # 6. 测试 lookup_funcs (by name)
+    # 6. 测试 get_func_by_addr (by name)
     if func_name:
-        test_function("lookup_funcs (by name)", functions.lookup_funcs, [func_name])
+        test_function(
+            "get_func_by_addr (by name)", functions.get_func_by_addr, [func_name]
+        )
 
     # 7. 测试 decompile (如果Hex-Rays可用)
     if func_addr:
@@ -161,11 +167,11 @@ def run_tests(functions: ida_functions.IDAFunctions):
     )
 
     # 13. 测试 get_global_value
-    test_function("get_global_value", functions.get_global_value, func_addr)
+    test_function("get_global_value", functions.get_global_value, [func_addr])
 
-    test_function("get_global_value", functions.get_global_value, "aBadFileDescrip")
+    test_function("get_global_value", functions.get_global_value, ["aBadFileDescrip"])
 
-    test_function("get_global_value", functions.get_global_value, "aBadescrip")
+    test_function("get_global_value", functions.get_global_value, ["aBadescrip"])
 
     # 15. 测试 stack_frame
     test_function("stack_frame", functions.stack_frame, [func_addr])

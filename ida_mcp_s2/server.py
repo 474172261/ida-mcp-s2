@@ -385,29 +385,30 @@ def reload_database(session_id: str, save_changes: bool = False) -> Dict[str, An
 
 
 @mcp.tool()
-def list_funcs(
-    session_id: str, offset: int = 0, limit: int = 10, contain: Optional[str] = "*"
-) -> Dict[str, Any]:
+def list_funcs(session_id: str, queries: Optional[List[Tuple[int, int, str]]] = None) -> Dict[str, Any]:
     """List functions in the database
 
     Args:
         session_id: The session ID
-        offset: Start offset for pagination
-        limit: Maximum number of results
-        contain: contain functions by name substring. Optional
+        queries: 可选项, List of Tuple(offset,limit,regex)
+            offset: int, 分页偏移
+            limit: int, 返回结果限制. 0表示无限制
+            regex: str, 正则表达式筛选函数结果
     """
-    return _call_ida_method(session_id, "list_funcs", [offset, limit, contain])
+    if queries is None:
+        queries = [(0,0,'')]
+    return _call_ida_method(session_id, "list_funcs", queries)
 
 
 @mcp.tool()
-def lookup_funcs(session_id: str, queries: List[str]) -> Dict[str, Any]:
+def get_func_by_addr(session_id: str, queries: List[str]) -> Dict[str, Any]:
     """Look up functions by name or address
 
     Args:
         session_id: The session ID
         queries: List of function names or addresses to look up, include regex
     """
-    return _call_ida_method(session_id, "lookup_funcs", queries)
+    return _call_ida_method(session_id, "get_func_by_addr", queries)
 
 
 @mcp.tool()
