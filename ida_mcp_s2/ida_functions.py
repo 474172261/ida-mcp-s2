@@ -59,12 +59,12 @@ def list_funcs(queries: List[Tuple[int, int, str]]) -> List[Dict]:
         for clean_name, func_ea, func in global_func_lists:
             if not func or not regex_obj.search(clean_name):
                 continue
-            
+
             # 记录匹配到的总数（用于判断是否越过 offset）
             if found_count < offset:
                 found_count += 1
                 continue
-            
+
             # 检查是否达到 limit
             if limit and len(matched_items) >= limit:
                 is_limited = True
@@ -74,8 +74,8 @@ def list_funcs(queries: List[Tuple[int, int, str]]) -> List[Dict]:
             matched_items.append({
                 "addr": hex(func_ea),
                 "name": clean_name,
-                "byte size": func.size(),
-                'decompile size': len(str(ida_hexrays.decompile(func)))
+                "size": func.size(),
+                # 'decompile size': len(str(ida_hexrays.decompile(func))) # 太耗时
             })
             found_count += 1
 
@@ -84,16 +84,18 @@ def list_funcs(queries: List[Tuple[int, int, str]]) -> List[Dict]:
         else:
             results.append({
                 'query': regex,
-                'items': matched_items,
-                'has_more': is_limited,  # 告知用户是否还有更多数据未列出
                 'count': len(matched_items)
+                'items': matched_items,
+                'offset': offset,
+                'limit': limit if limit else 'all',
+                'has_more': is_limited,  # 告知用户是否还有更多数据未列出
             })
 
     return results
 
 def list_globals(
     offset: int = 0,
-    limit: int = 10,
+    limit: int = 200,
     contain: str = "*",
 ) -> Dict:
     """列出全局变量 - 增加截断状态告知 (contain 默认值为 *)"""
@@ -104,7 +106,7 @@ def list_globals(
     matched_items = []
     found_count = 0  # 记录符合过滤条件的条目总数
     has_more = False
-    
+
     # 预处理搜索词
     search_term = contain.lower()
     use_filter = search_term != '*'
@@ -113,7 +115,7 @@ def list_globals(
         # 1. 过滤：如果不匹配则跳过
         if use_filter and search_term not in name.lower():
             continue
-        
+
         # 2. 分页 Offset：统计符合条件但尚未到达起始位置的条目
         if found_count < offset:
             found_count += 1
@@ -135,8 +137,8 @@ def list_globals(
     }
 
 def list_imports(
-    offset: int = 0, 
-    limit: int = 10, 
+    offset: int = 0,
+    limit: int = 200,
     contain: str = "*"
 ) -> Dict:
     """列出导入符号 - 增加截断状态告知"""
@@ -147,7 +149,7 @@ def list_imports(
     matched_items = []
     found_count = 0  # 记录符合过滤条件的条目数
     has_more = False
-    
+
     # 预处理搜索词
     search_term = contain.lower()
     use_filter = search_term != '*'
@@ -156,7 +158,7 @@ def list_imports(
         # 1. 过滤：先检查是否匹配关键词
         if use_filter and (search_term not in name.lower()):
             continue
-            
+
         # 2. 分页 Offset：跳过前 offset 个匹配项
         if found_count < offset:
             found_count += 1
@@ -183,18 +185,18 @@ def list_imports(
         "count_in_page": len(matched_items)
     }
 
-def get_func_by_addr(addresses: List[int]) -> List[Dict]:
+def get_func_by_addr(addresses: List[str]) -> List[Dict]:
     """根据地址获取所属函数信息"""
     results = []
 
     for addr_input in addresses:
         try:
             # 兼容字符串形式的十六进制 (0x...) 或 整数
-            ea = addr_input
-            
+            ea = int(addr_input, 0)
+
             # 使用 IDA SDK 获取函数对象
             func = ida_funcs.get_func(ea)
-            
+
             if func:
                 results.append({
                     "query_addr": hex(ea),
@@ -205,22 +207,23 @@ def get_func_by_addr(addresses: List[int]) -> List[Dict]:
                 })
             else:
                 results.append({
-                    "query_addr": hex(ea), 
+                    "query_addr": hex(ea),
                     "msg": "Address does not belong to any function"
                 })
-                
+
         except (ValueError, TypeError):
             results.append({
-                "query_addr": str(addr_input), 
+                "query_addr": str(addr_input),
                 "msg": "Invalid address format"
             })
 
     return results
 
 
-def decompile(faddr: int, offset: int = 0, limit: int = 0) -> Dict:
+def decompile(addr: str, offset: int = 0, limit: int = 0) -> Dict:
     """反编译函数 - 仅支持地址(int)，增加截断告知"""
     # 1. 获取函数对象
+    faddr = int(addr, 0)
     this_func = ida_funcs.get_func(faddr)
     if not this_func:
         raise ValueError(f"No function found at {hex(faddr)}")
@@ -254,27 +257,29 @@ def decompile(faddr: int, offset: int = 0, limit: int = 0) -> Dict:
         'addr': hex(this_func.start_ea),
         'code': code_segment,
         'offset': offset,
+        'limit' : limit if limit else 'all',
         'has_more': has_more,
         'next_offset': offset + len(code_segment) if has_more else None,
         'total_size': total_len
     }
 
-def disasm(addr: int, offset: int = 0, limit: int = 0) -> Dict:
+def disasm(addr: str, offset: int = 0, limit: int = 0) -> Dict:
     """反汇编 - 仅支持地址(int)，增加截断告知"""
+    addr = int(addr, 0)
     this_func = ida_funcs.get_func(addr)
     lines = []
     has_more = False
-    
+
     # 情况 A: 地址属于某个函数 (按指令条数分页)
     if this_func:
         curr_addr = this_func.start_ea
         end_addr = this_func.end_ea
-        
+
         found_count = 0
         while curr_addr < end_addr:
             disasm_text = idc.generate_disasm_line(curr_addr, 0)
             if not disasm_text: break
-            
+
             # 分页逻辑
             if found_count >= offset:
                 if limit and (len(lines) < limit):
@@ -282,7 +287,7 @@ def disasm(addr: int, offset: int = 0, limit: int = 0) -> Dict:
                 else:
                     has_more = True
                     break
-            
+
             found_count += 1
             curr_addr = idc.next_head(curr_addr, end_addr)
             if curr_addr == idaapi.BADADDR: break
@@ -292,6 +297,7 @@ def disasm(addr: int, offset: int = 0, limit: int = 0) -> Dict:
             "func_name": get_readble_name(this_func.start_ea),
             "codes": "\n".join(lines),
             "offset": offset,
+            'limit': limit if limit else 'all',
             "has_more": has_more,
             "next_offset": offset + len(lines) if has_more else None
         }
@@ -302,17 +308,17 @@ def disasm(addr: int, offset: int = 0, limit: int = 0) -> Dict:
         for _ in range(10):
             disasm_text = idc.generate_disasm_line(curr_addr, 0)
             if not disasm_text: break
-            
+
             lines.append(f"{hex(curr_addr)}: {disasm_text}")
             curr_addr = idc.next_head(curr_addr)
             if curr_addr == idaapi.BADADDR: break
-        
+
         # 散点反汇编通常不谈 offset，直接给下一个地址
         return {
             "type": "raw_address",
             "codes": "\n".join(lines),
             "next_addr": hex(curr_addr) if len(lines) == limit else None,
-            "msg": "Address is not in a function, showing raw instructions."
+            "msg": "Address is not in a function, showing 10 raw instructions."
         }
 
 
@@ -532,7 +538,7 @@ def read_string(addrs: Union[str, List[str]]) -> List[Dict]:
 
     return results
 
-def search_in_strings_window(pattern: str, offset=0, limit=10) -> Dict:
+def search_in_strings_window(pattern: str, offset=0, limit=40) -> Dict:
     global global_strings_lists
     try:
         regex = re.compile(pattern, re.I)
@@ -554,6 +560,8 @@ def search_in_strings_window(pattern: str, offset=0, limit=10) -> Dict:
         "results": matches,
         "count": len(matches),
         "next": offset + len(matches) if more else None,
+        'offset': offset,
+        'limit' : limit,
         "has_more": more
     }
 
@@ -577,16 +585,18 @@ def get_global_value(queries: Union[str, List[str]]) -> List[Dict]:
                     addr = each[0]
                     found = True
             if not found:
-                raise ValueError(f"Can't read data at {query}, not a global Name")
+                results.append({'query':query, 'msg':f"not a global Name"})
+                continue
 
         # Read value (assume 4-byte for now)
         try:
             value = ida_bytes.get_dword(addr)
         except Exception as e:
-            raise ValueError(f"Can't read data at {query}. Error:{e}")
+            results.append({'query':query, 'msg':f"Error:{e}"})
+            continue
 
         results.append(
-            {"name_or_addr": query, "address": hex(addr), "value": hex(value)}
+            {"query": query, "address": hex(addr), "value": hex(value)}
         )
 
     return results
@@ -652,7 +662,7 @@ def declare_stack_variable(items: List[Dict]) -> List[Dict]:
         # 定义/修改栈变量 (根据你之前的报错，使用 4 参数版本)
         success = ida_frame.define_stkvar(pfn, name, actual_offset, tif)
 
-        results.append({"name": name, "status": "success" if success else "failed"})
+        results.append({"name": name, "status": "ok" if success else "failed"})
     return results
 
 
@@ -725,7 +735,7 @@ def delete_stack_variable(items: List[Dict]) -> List[Dict]:
                 )
                 continue
 
-            results.append({"addr": fn_addr, "name": var_name, "status": True})
+            results.append({"addr": fn_addr, "name": var_name, "status": 'ok'})
         except Exception as e:
             results.append({"addr": fn_addr, "name": var_name, "error": str(e)})
 
@@ -861,7 +871,7 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
                     lsi.type = new_type
                     ida_hexrays.modify_user_lvar_info(func.start_ea, ida_hexrays.MLI_TYPE, lsi)
                     msg = 'type now is: '+ new_type.dstr()
-                    success = "OK"
+                    success = "ok"
             else:
                 msg = f"can't find var name:{var_name}"
 
@@ -897,7 +907,7 @@ def set_comments_at_disassembly(items: List[Dict]) -> List[Dict]:
 
         success = ida_bytes.set_cmt(addr, text, is_repeatable)
 
-        results.append({"addr": hex(addr), "success": success})
+        results.append({"addr": hex(addr), "status": 'ok' if success else 'fail'})
 
     return results
 
@@ -932,7 +942,7 @@ def add_pseudocode_comment(params: List[Dict]) -> List[Dict]:
         cfunc.save_user_cmts()
         cfunc.refresh_func_ctext()
 
-        results.append({"addr": hex(ea), "success": True})
+        results.append({"addr": hex(ea), "status": 'ok'})
     return results
 
 def create_struct_from_c(queries: List[str], is_update: bool = False) -> List[Dict]:
@@ -999,7 +1009,7 @@ def define_func(items: List[Dict]) -> List[Dict]:
             # Set function name
             ida_name.set_name(addr, name, ida_name.SN_CHECK)
 
-        results.append({"address": hex(addr), "name": name, "success": success})
+        results.append({"address": hex(addr), "name": name, "status": 'ok' if success else 'fail'})
 
     return results
 
@@ -1014,7 +1024,7 @@ def define_code(items: List[Dict]) -> List[Dict]:
 
         success = ida_ua.create_insn(addr)
 
-        results.append({"address": hex(addr), "success": success})
+        results.append({"address": hex(addr), "status": 'ok' if success else 'fail'})
 
     return results
 
@@ -1034,14 +1044,14 @@ def undefine(items: List[Dict]) -> List[Dict]:
             # Undefine as data/code
             success = ida_bytes.del_items(addr, ida_bytes.DELIT_SIMPLE)
 
-        results.append({"address": hex(addr), "success": success})
+        results.append({"address": hex(addr), "status": 'ok' if success else 'fail'})
 
     return results
 
 def find_bytes(patterns: Union[list, str], offset: int = 0, limit: int = 10) -> dict:
     """字节模式搜索，支持分页与截断告知"""
     if isinstance(patterns, str): patterns = [patterns]
-    
+
     results, found, more = [], 0, False
     min_ea, max_ea = idc.get_inf_attr(idc.INF_MIN_EA), idc.get_inf_attr(idc.INF_MAX_EA)
 
@@ -1065,7 +1075,7 @@ def find_bytes(patterns: Union[list, str], offset: int = 0, limit: int = 10) -> 
                     })
                 else:
                     more = True; break
-            
+
             found += 1
             curr_ea += 1 # 继续向后搜索
         if more: break
@@ -1074,7 +1084,9 @@ def find_bytes(patterns: Union[list, str], offset: int = 0, limit: int = 10) -> 
         "results": results,
         "count": len(results),
         "next": offset + len(results) if more else None,
-        "more": more
+        'offset': offset,
+        'limit': limit,
+        "has_more": more
     }
 
 def py_eval(code: Annotated[str, "Python code"]) -> dict:
@@ -1275,7 +1287,7 @@ class IDAFunctions:
         contain = params[2]
         return {"imports": list_imports(offset, limit, contain)}
 
-    def get_func_by_addr(self, params: List) -> Dict:
+    def get_func_by_addr(self, params: List[str]) -> Dict:
         return {"functions": get_func_by_addr(params)}
 
     def decompile(self, params: List) -> Dict:

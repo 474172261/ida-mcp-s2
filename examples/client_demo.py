@@ -546,10 +546,11 @@ async def demo():
     # Test configuration
     func_name = "CAAHttpServerTransport::HandleReceiveRequestCompletion"
     func_addr = "0x180077C14"
+    int_func_addr = 0x180077C14
     test_string_addr = "0x1800A21D8"
     test_global_name = "aBadFileDescrip"
-    struct_name = "_HTTP_REQUEST_V2"
-    struct_field = "RequestInfoCount"
+    struct_name = "_SecBuffer"
+    struct_field = "cbBuffer"
     await client.connect()
     print_section("IDA MCP Client Demo - 完整功能测试")
     result = await client.list_tools()
@@ -593,14 +594,9 @@ async def demo():
         print_result("Imports", imports)
 
         # 7. 查找函数（通过地址）
-        print_section(f"7. Lookup Function by Address: {func_addr}")
+        print_section(f"7. get_func_by_addr by Address: {func_addr}")
         lookup_addr = await client.get_func_by_addr([func_addr])
-        print_result("Lookup Result", lookup_addr)
-
-        # 8. 查找函数（通过名称）
-        print_section(f"8. Lookup Function by Name: {func_name}")
-        lookup_name = await client.get_func_by_addr([func_name])
-        print_result("Lookup Result", lookup_name)
+        print_result("get_func_by_addr Result", lookup_addr)
 
         # 9. 反编译函数
         print_section(f"9. Decompile Function: {func_addr}")
@@ -734,12 +730,11 @@ async def demo():
         create_struct = await client.create_struct_from_c([c_struct])
         print_result("Create Struct Result", create_struct)
 
-        # # 27. 设置局部变量类型
-        # print_section("27. Set Local Variable Type")
-        # lvar_result = await client.set_lvar_type(
-        #     [{"ea": func_addr, "var_name": "connection_info", "struct_type": "int *a;"}]
-        # )
-        # print_result("Set Lvar Type Result", lvar_result)
+        # 27. 设置局部变量类型
+        print_section("27. Set Local Variable Type")
+        lvar_result = await client.set_lvar_type(
+            [{"ea": '0x18007AA58', "var_name": "a8", "struct_type": "int *a;"}]
+        )
 
         # 28. 取消定义函数
         print_section(f"28. Undefine Function: {func_addr}")

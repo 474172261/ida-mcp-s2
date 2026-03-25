@@ -44,16 +44,16 @@ def get_wide_strings_manually(min_len=5):
         seg = ida_segment.getseg(seg_ea)
         start = seg.start_ea
         end = seg.end_ea
-        
+
         curr = start
         while curr < end:
             # 尝试在当前位置获取 UTF-16 字符串内容
             # STRTYPE_C_16 = 1 (Windows Unicode)
             content = ida_bytes.get_strlit_contents(curr, -1, ida_nalt.STRTYPE_C_16)
-            
+
             if content and len(content) >= min_len and is_printable(content): # UTF-16 每个字符2字节
                 try:
-                    
+
                     text = content.decode('utf-8')
                     wide_string.append((curr, text))
                     found_count += 1
@@ -62,5 +62,5 @@ def get_wide_strings_manually(min_len=5):
                     curr += 2
             else:
                 curr += 2 # UTF-16 通常是对齐的，每次移动2字节
-                
+
     return wide_string

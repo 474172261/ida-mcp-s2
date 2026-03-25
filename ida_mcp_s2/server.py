@@ -342,7 +342,6 @@ def open_database(name: str) -> Dict[str, Any]:
         return {
             "session_id": session_id,
             "database": str(db_path.name),
-            "path": str(db_path),
         }
     except Exception as e:
         raise ValueError(f"Failed to open database: {e}")
@@ -385,7 +384,7 @@ def reload_database(session_id: str, save_changes: bool = False) -> Dict[str, An
 
 
 @mcp.tool()
-def list_funcs(session_id: str, queries: Optional[List[Tuple[int, int, str]]] = None) -> Dict[str, Any]:
+def list_funcs(session_id: str, queries: Optional[List[Any]] = None) -> Dict[str, Any]:
     """List functions in the database
 
     Args:
@@ -395,7 +394,7 @@ def list_funcs(session_id: str, queries: Optional[List[Tuple[int, int, str]]] = 
             limit: int, 返回结果限制. 0表示无限制
             regex: str, 正则表达式筛选函数结果
     """
-    if queries is None:
+    if not queries:
         queries = [(0,0,'')]
     return _call_ida_method(session_id, "list_funcs", queries)
 
@@ -406,7 +405,7 @@ def get_func_by_addr(session_id: str, queries: List[str]) -> Dict[str, Any]:
 
     Args:
         session_id: The session ID
-        queries: List of function names or addresses to look up, include regex
+        queries: str, list of addresses
     """
     return _call_ida_method(session_id, "get_func_by_addr", queries)
 
@@ -415,11 +414,11 @@ def get_func_by_addr(session_id: str, queries: List[str]) -> Dict[str, Any]:
 def decompile(session_id: str, addr: str, offset: int = 0, limit: int = 0) -> Dict:
     """Decompile a function
 
-    Args:
+    Args:d
         session_id: The session ID
-        addr: Function address or name
-        offset: Start offset for pagination
-        limit: Maximum number of results
+        addr: str, Function address
+        offset: int, Start offset for pagination
+        limit: int, Maximum number of results
     """
     result = _call_ida_method(session_id, "decompile", [addr, offset, limit])
     return result.get("result", "")
@@ -431,9 +430,9 @@ def disasm(session_id: str, addr: str, offset: int = 0, limit: int = 0) -> Dict:
 
     Args:
         session_id: The session ID
-        addr: Function address or name
-        offset: Start offset for pagination
-        limit: Maximum number of results
+        addr: str, Function address
+        offset: int, Start offset for pagination
+        limit: int, Maximum number of results
     """
     result = _call_ida_method(session_id, "disasm", [addr, offset, limit])
     return result.get("result", "")
@@ -470,7 +469,7 @@ def callees(session_id: str, addrs: List[str]) -> Dict[str, Any]:
 
     Args:
         session_id: The session ID
-        addrs: List of function addresses
+        addrs: List[str], List of function addresses
     """
     return _call_ida_method(session_id, "callees", addrs)
 
@@ -484,7 +483,7 @@ def get_bytes(session_id: str, addrs: List[str]) -> Dict[str, Any]:
 
     Args:
         session_id: The session ID
-        addrs: List of addresses to read from
+        addrs: List[str], List of addresses to read from
     """
     return _call_ida_method(session_id, "get_bytes", addrs)
 
@@ -517,7 +516,7 @@ def read_string(session_id: str, addrs: List[str]) -> Dict[str, Any]:
 @mcp.tool()
 def search_in_strings_window(session_id: str, pattern: str, offset: int = 0, limit: int = 10)-> Dict:
     """ search strings with pattern
-    
+
     Args:
         pattern: regex
         offset : Start offset for pagination
@@ -534,9 +533,9 @@ def list_globals(
 
     Args:
         session_id: The session ID
-        offset: Start offset for pagination
-        limit: Maximum number of results
-        contain: contain globals by name substring. Optional
+        offset: int, Start offset for pagination
+        limit: int, Maximum number of results
+        contain: str, contain globals by name substring. Optional
     """
     return _call_ida_method(session_id, "list_globals", [offset, limit, contain])
 
@@ -752,7 +751,7 @@ def py_eval(session_id: str, code: str) -> Dict[str, Any]:
         code: Python code to execute
     """
     return _call_ida_method(session_id, "py_eval", code)
-                             
+
 # Server lifecycle functions
 def init_server(database_dir: str):
     """Initialize server with database directory"""

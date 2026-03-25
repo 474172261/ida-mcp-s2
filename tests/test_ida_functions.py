@@ -103,7 +103,6 @@ def run_tests(functions: ida_functions.IDAFunctions):
     status, result_globals = test_function(
         "list_globals", functions.list_globals, [0, 5, "*"]
     )
-    print(result_globals)
     # 4. 测试 list_imports
     test_function("list_imports", functions.list_imports, [0, 5, "*"])
 
@@ -111,12 +110,6 @@ def run_tests(functions: ida_functions.IDAFunctions):
     if func_addr:
         test_function(
             "get_func_by_addr (by address)", functions.get_func_by_addr, [func_addr]
-        )
-
-    # 6. 测试 get_func_by_addr (by name)
-    if func_name:
-        test_function(
-            "get_func_by_addr (by name)", functions.get_func_by_addr, [func_name]
         )
 
     # 7. 测试 decompile (如果Hex-Rays可用)
@@ -128,12 +121,10 @@ def run_tests(functions: ida_functions.IDAFunctions):
         test_function("decompile", functions.decompile, [func_addr, 20, 20000])
 
     # 8. 测试 disasm
-    if func_addr:
-        test_function("disasm", functions.disasm, [func_addr, 0, 10])
+    test_function("disasm", functions.disasm, [func_addr, 0, 10])
 
-        test_function("disasm", functions.disasm, [func_addr, 10, 10])
+    test_function("disasm", functions.disasm, [func_addr, 10, 10])
 
-    test_function("disasm", functions.disasm, [func_name, 0, 0])
 
     # 9. 测试 xrefs_to_addr
     if func_addr:
@@ -141,7 +132,7 @@ def run_tests(functions: ida_functions.IDAFunctions):
     test_function(
         "xrefs_to_field",
         functions.xrefs_to_field,
-        [{"struct": "_HTTP_REQUEST_V2", "field": "RequestInfoCount"}],
+        [{"struct": "_SecBuffer", "field": "cbBuffer"}],
     )
 
     # 10. 测试 callees
@@ -196,7 +187,7 @@ def run_tests(functions: ida_functions.IDAFunctions):
     )
 
     test_function(
-        "read_struct_define", functions.read_struct_define, ["_HTTP_REQUEST_V2"]
+        "read_struct_define", functions.read_struct_define, ["_SecBuffer"]
     )
 
     # 16. 测试 search_structs
@@ -217,7 +208,7 @@ def run_tests(functions: ida_functions.IDAFunctions):
     test_function(
         "create_struct_from_c",
         functions.create_struct_from_c,
-        ["struct MyTestStruc3 { int a; float b; };", False],
+        [["struct MyTestStruc3 { int a; float b; };"], False],
     )
 
     test_function("define_code", functions.define_code, [{"addr": func_addr}])
@@ -235,7 +226,7 @@ def run_tests(functions: ida_functions.IDAFunctions):
     test_function(
         "set_lvar_type",
         functions.set_lvar_type,
-        [{"ea": 0x180084308, "var_name": "connection_info", "struct_type": "int *a;"}],
+        [{"ea": '0x18007AA58', "var_name": "a8", "struct_type": "int *a;"}],
     )
     # 打印测试总结
     print("\n" + "=" * 70)
