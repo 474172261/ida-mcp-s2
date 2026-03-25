@@ -84,7 +84,7 @@ def list_funcs(queries: List[Tuple[int, int, str]]) -> List[Dict]:
         else:
             results.append({
                 'query': regex,
-                'count': len(matched_items)
+                'count': len(matched_items),
                 'items': matched_items,
                 'offset': offset,
                 'limit': limit if limit else 'all',
