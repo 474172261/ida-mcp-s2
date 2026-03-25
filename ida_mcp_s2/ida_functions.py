@@ -4,7 +4,7 @@ IDA功能实现
 """
 import ida_idaapi
 import idautils
-from typing import List, Dict, Any, Optional, Union, Annotated
+from typing import List, Dict, Any, Optional, Union, Annotated, Tuple
 import json
 import ida_funcs
 import ida_name
@@ -33,272 +33,287 @@ from ida_mcp_s2.utils import get_wide_strings_manually, get_readble_name, debug_
 
 
 global_func_lists = []
+global_func_dict = {}
 global_Nams_lists = []
 global_imports_lists = []
 global_strings_lists = []
 
-def list_funcs(
-    offset: int = 0,
-    limit: int = 10,
-    contain = '*',
-) -> List[Dict]:
-    """列出函数 - 函数式实现"""
+def list_funcs(queries: List[Tuple[int, int, str]]) -> List[Dict]:
+    """列出函数 - 函数式实现 (增加 limit 截断状态)"""
     global global_func_lists
     results = []
-    func_count = 0
-    if len(global_func_lists) == 0:
+    if not global_func_lists:
         raise ValueError("not init yet")
 
-    for clean_name,func_ea,func in global_func_lists:
-        if not func:
+    for offset, limit, regex in queries:
+        try:
+            regex_obj = re.compile(regex or '.*', re.IGNORECASE)
+        except re.error:
+            results.append({'query': regex, 'msg': "Invalid regex pattern"})
             continue
 
-        # Apply contain
-        if (contain != '*') and contain.lower() not in clean_name.lower():
-            continue
+        matched_items = []
+        found_count = 0
+        is_limited = False
 
-        func_count += 1
-        # Apply pagination
-        if func_count <= offset:
-            continue
-        if len(results) >= limit:
-            break
-        results.append(
-            {"address": hex(func_ea), "name": clean_name, "size": func.size()}
-        )
+        for clean_name, func_ea, func in global_func_lists:
+            if not func or not regex_obj.search(clean_name):
+                continue
+            
+            # 记录匹配到的总数（用于判断是否越过 offset）
+            if found_count < offset:
+                found_count += 1
+                continue
+            
+            # 检查是否达到 limit
+            if limit and len(matched_items) >= limit:
+                is_limited = True
+                break
+
+            # 执行耗时操作：反编译
+            matched_items.append({
+                "addr": hex(func_ea),
+                "name": clean_name,
+                "byte size": func.size(),
+                'decompile size': len(str(ida_hexrays.decompile(func)))
+            })
+            found_count += 1
+
+        if not matched_items:
+            results.append({'query': regex, 'msg': f"no match found"})
+        else:
+            results.append({
+                'query': regex,
+                'items': matched_items,
+                'has_more': is_limited,  # 告知用户是否还有更多数据未列出
+                'count': len(matched_items)
+            })
 
     return results
-
 
 def list_globals(
     offset: int = 0,
     limit: int = 10,
-    contain: Optional[str] = None,
-) -> List[Dict]:
-    """列出全局变量 - 函数式实现"""
+    contain: str = "*",
+) -> Dict:
+    """列出全局变量 - 增加截断状态告知 (contain 默认值为 *)"""
     global global_Nams_lists
-    results = []
-    global_count = 0
-
-    if len(global_Nams_lists) == 0:
+    if not global_Nams_lists:
         raise ValueError("not init yet")
+
+    matched_items = []
+    found_count = 0  # 记录符合过滤条件的条目总数
+    has_more = False
+    
+    # 预处理搜索词
+    search_term = contain.lower()
+    use_filter = search_term != '*'
+
     for ea, name in global_Nams_lists:
-            # Apply filter
-            if (contain != '*') and contain.lower() not in name.lower():
-                continue
-
-            global_count += 1
-
-            # Apply pagination
-            if global_count <= offset:
-                continue
-            results.append({"address": hex(ea), "name": name})
-            if len(results) >= limit:
-                break
-    return results
-
-
-def list_imports(offset: int = 0, limit: int = 10, contain: Optional[str] = "*") -> List[Dict]:
-    """列出导入符号 - 函数式实现"""
-    global global_imports_lists
-
-    results = []
-    if len(global_imports_lists) == 0:
-        raise ValueError("not init yet")
-
-    total_count = 0
-    for ea, name, module_name in global_imports_lists:
-        if offset > total_count:
+        # 1. 过滤：如果不匹配则跳过
+        if use_filter and search_term not in name.lower():
             continue
         
-        if (contain != '*') and contain.lower() not in name.lower():
-                continue
-        
-        results.append(
-            {
-                "address": hex(ea),
-                "name": name,
-                "module": module_name,
-            }
-        )
-        total_count += 1
+        # 2. 分页 Offset：统计符合条件但尚未到达起始位置的条目
+        if found_count < offset:
+            found_count += 1
+            continue
 
-        if len(results) >= limit:
+        # 3. 限制 Limit：如果达到上限，标记 has_more 并结束
+        if len(matched_items) >= limit:
+            has_more = True
             break
-    return results
 
-def lookup_funcs(queries: List[str]) -> List[Dict]:
-    """查找函数 - 函数式实现"""
-    global global_func_lists
+        matched_items.append({"address": hex(ea), "name": name})
+        found_count += 1
 
+    return {
+        "items": matched_items,
+        "has_more": has_more,
+        "offset": offset,
+        "limit": limit
+    }
+
+def list_imports(
+    offset: int = 0, 
+    limit: int = 10, 
+    contain: str = "*"
+) -> Dict:
+    """列出导入符号 - 增加截断状态告知"""
+    global global_imports_lists
+    if not global_imports_lists:
+        raise ValueError("not init yet")
+
+    matched_items = []
+    found_count = 0  # 记录符合过滤条件的条目数
+    has_more = False
+    
+    # 预处理搜索词
+    search_term = contain.lower()
+    use_filter = search_term != '*'
+
+    for ea, name, module_name in global_imports_lists:
+        # 1. 过滤：先检查是否匹配关键词
+        if use_filter and (search_term not in name.lower()):
+            continue
+            
+        # 2. 分页 Offset：跳过前 offset 个匹配项
+        if found_count < offset:
+            found_count += 1
+            continue
+
+        # 3. 限制 Limit：达到上限则标记并停止
+        if len(matched_items) >= limit:
+            has_more = True
+            break
+
+        matched_items.append({
+            "address": hex(ea),
+            "name": name,
+            "module": module_name,
+        })
+        # 即使加入了结果集，也要增加计数以维持逻辑
+        found_count += 1
+
+    return {
+        "items": matched_items,
+        "has_more": has_more,
+        "offset": offset,
+        "limit": limit,
+        "count_in_page": len(matched_items)
+    }
+
+def get_func_by_addr(addresses: List[int]) -> List[Dict]:
+    """根据地址获取所属函数信息"""
     results = []
-    for query in queries:
-        # Try to parse as address
+
+    for addr_input in addresses:
         try:
-            addr = int(query, 0)
-            func = ida_funcs.get_func(addr)
+            # 兼容字符串形式的十六进制 (0x...) 或 整数
+            ea = addr_input
+            
+            # 使用 IDA SDK 获取函数对象
+            func = ida_funcs.get_func(ea)
+            
             if func:
-                func_name = get_readble_name(func.start_ea)
-                results.append(
-                    {
-                        "address": hex(func.start_ea),
-                        "name": func_name,
-                        "size": func.size(),
-                    }
-                )
+                results.append({
+                    "query_addr": hex(ea),
+                    "func_start": hex(func.start_ea),
+                    "func_end": hex(func.end_ea),
+                    "name": get_readble_name(func.start_ea),
+                    'decompile size': len(str(ida_hexrays.decompile(func)))
+                })
             else:
-                raise ValueError(f"error: {query} not a function.")
-        except ValueError:
-            found = False
-            for clean_name, func_ea, func in global_func_lists:                                             
-                if query == clean_name:                                                                       
-                    results.append(                                                                         
-                        {                                                                                   
-                            "address": hex(func.start_ea),                                                  
-                            "name": query,                                                                  
-                            "size": func.size(),                                                            
-                        }                                                                                   
-                    )                                                                                       
-                    found = True                                                                            
-                    break   
-            if not found:                                                                        
-                try:                                                                                            
-                    regex_obj = re.compile(query, re.IGNORECASE)                                                
-                    for clean_name, func_ea, func in global_func_lists:                                         
-                        if regex_obj.search(clean_name):                                                        
-                            results.append(                                                                     
-                                {                                                                               
-                                    "address": hex(func_ea),                                                    
-                                    "name": clean_name,                                                         
-                                    "size": func.size(),                                                        
-                                }                                                                               
-                            )                                                                                   
-                            found = True                                                                          
-                except re.error:                                                                                
-                    raise ValueError("string contain regex, but regex wrong")                                                                                          
-                                                                                                                
-            if not found:                                                                                       
-                raise ValueError(f"function {query} can't find") 
+                results.append({
+                    "query_addr": hex(ea), 
+                    "msg": "Address does not belong to any function"
+                })
+                
+        except (ValueError, TypeError):
+            results.append({
+                "query_addr": str(addr_input), 
+                "msg": "Invalid address format"
+            })
 
     return results
 
 
-def decompile(addr_or_name: str, offset: int = 0, limit: int = 0) -> Dict:
-    """反编译函数 - 函数式实现"""
-
-    # Parse address
-    this_func = None
-    fname = None
-    faddr = None
-    if isinstance(addr_or_name, str):
-        try:
-            addr = int(addr_or_name, 0)
-            this_func = ida_funcs.get_func(addr)
-            if not this_func:
-                raise ValueError(f"No function at address {addr_or_name}")
-            fname = get_readble_name(this_func.start_ea)
-            faddr = addr
-        except:
-            for clean_name,func_ea,func in global_func_lists:
-                if clean_name == addr_or_name:
-                    this_func = func
-                    faddr = func.start_ea
-                    fname = clean_name
-                    break
+def decompile(faddr: int, offset: int = 0, limit: int = 0) -> Dict:
+    """反编译函数 - 仅支持地址(int)，增加截断告知"""
+    # 1. 获取函数对象
+    this_func = ida_funcs.get_func(faddr)
     if not this_func:
-        raise ValueError(f"No function of {addr_or_name}")
+        raise ValueError(f"No function found at {hex(faddr)}")
 
+    # 2. 执行反编译
     cfunc = ida_hexrays.decompile(this_func)
     if not cfunc:
-        raise ValueError(f"Failed to decompile function at {addr_or_name}")
+        raise ValueError(f"Failed to decompile function at {hex(faddr)}")
 
-    string = str(cfunc)
-    if limit:
-        if len(string) > offset + limit:
-            string = string[offset: offset+limit]
-            result = {'func_name': fname, 'addr': hex(faddr), 'cur offset':offset, 'code':string, 'next offset to read': offset + limit}
-        elif offset >= len(string):
-            result = {'error':'offset is too big'}
-        else:
-            result = {'func_name': fname, 'addr': hex(faddr), 'cur offset':offset, 'code':string[offset:], 'finish': True}
+    full_code = str(cfunc)
+    total_len = len(full_code)
+
+    # 3. 边界检查
+    if offset >= total_len:
+        return {
+            'addr': hex(this_func.start_ea),
+            'error': 'offset out of bounds',
+            'total_size': total_len
+        }
+
+    # 4. 计算截断逻辑
+    if limit > 0 and (offset + limit) < total_len:
+        code_segment = full_code[offset : offset + limit]
+        has_more = True
     else:
-        result = {'func_name': fname, 'addr': hex(faddr), 'code':string, 'finish': True}
-    return result
+        code_segment = full_code[offset:]
+        has_more = False
 
-def disasm(addr_or_name: str, offset: int = 0, limit: int = 0) -> Dict:
-    """反汇编函数 - 获取函数的汇编代码或指定地址起的10条指令"""
+    return {
+        'func_name': get_readble_name(this_func.start_ea),
+        'addr': hex(this_func.start_ea),
+        'code': code_segment,
+        'offset': offset,
+        'has_more': has_more,
+        'next_offset': offset + len(code_segment) if has_more else None,
+        'total_size': total_len
+    }
+
+def disasm(addr: int, offset: int = 0, limit: int = 0) -> Dict:
+    """反汇编 - 仅支持地址(int)，增加截断告知"""
+    this_func = ida_funcs.get_func(addr)
+    lines = []
+    has_more = False
     
-    this_func = None
-    addr = None
-
-    # 1. 尝试解析地址或函数名
-    if isinstance(addr_or_name, str):
-        try:
-            addr = int(addr_or_name, 0)
-            this_func = ida_funcs.get_func(addr)
-        except ValueError:
-            # 如果不是数字，尝试从全局列表匹配
-            for clean_name, func_ea, func in global_func_lists:
-                if clean_name == addr_or_name:
-                    this_func = func
-                    addr = func.start_ea
-                    break
-
-    output = []
-    result = {}
-
-    # 情况 A: 找到了函数，反汇编整个函数
+    # 情况 A: 地址属于某个函数 (按指令条数分页)
     if this_func:
         curr_addr = this_func.start_ea
         end_addr = this_func.end_ea
-
-        count = 0
-        cur = 0
         
+        found_count = 0
         while curr_addr < end_addr:
-            insn = idaapi.insn_t()
-            insn_len = idaapi.decode_insn(insn, curr_addr)
-            if insn_len <= 0: break
-            
             disasm_text = idc.generate_disasm_line(curr_addr, 0)
-            if offset <= cur:
-                output.append(f'{hex(curr_addr)}: {disasm_text}\n')
-                if limit:
-                    count += 1
-                    if count >= limit:
-                        break
-            cur += 1
-            curr_addr += insn_len
-        if len(output) == 0:
-            result = {'err':'offset is two big'}
-        else:
-            output_string = ''.join(output)
-            result = {'codes': output_string, 'cur offset': offset, 'next offset to read': offset + limit}
+            if not disasm_text: break
+            
+            # 分页逻辑
+            if found_count >= offset:
+                if limit and (len(lines) < limit):
+                    lines.append(f"{hex(curr_addr)}: {disasm_text}")
+                else:
+                    has_more = True
+                    break
+            
+            found_count += 1
+            curr_addr = idc.next_head(curr_addr, end_addr)
+            if curr_addr == idaapi.BADADDR: break
 
-    # 情况 B: 未找到函数，但有有效地址，反汇编接下来的 10 条指令
-    elif addr is not None:
-        curr_addr = addr
-        output.append('addr is not in a function. show 10 instructions:\n')
-        for _ in range(10):
-            insn = idaapi.insn_t()
-            insn_len = idaapi.decode_insn(insn, curr_addr)
-            
-            # 如果无法解析指令（比如到了段末尾或非法数据）
-            if insn_len <= 0:
-                break
-                
-            disasm_text = idc.generate_disasm_line(curr_addr, 0)
-            if not disasm_text:
-                disasm_text = "db " + " ".join(
-                    f"{b:02X}" for b in idaapi.get_bytes(curr_addr, insn_len)
-                )
-            output.append(f'{hex(curr_addr)}: {disasm_text}\n')
-            curr_addr += insn_len
-        output_string = ''.join(output)
-        result = {'codes': output_string, 'next inst at addr': hex(curr_addr)}
+        return {
+            "type": "function",
+            "func_name": get_readble_name(this_func.start_ea),
+            "codes": "\n".join(lines),
+            "offset": offset,
+            "has_more": has_more,
+            "next_offset": offset + len(lines) if has_more else None
+        }
+
+    # 情况 B: 地址不属于函数 (显示固定数量指令)
     else:
-        raise ValueError(f"Could not resolve address or function: {addr_or_name}")
-    return result
+        curr_addr = addr
+        for _ in range(10):
+            disasm_text = idc.generate_disasm_line(curr_addr, 0)
+            if not disasm_text: break
+            
+            lines.append(f"{hex(curr_addr)}: {disasm_text}")
+            curr_addr = idc.next_head(curr_addr)
+            if curr_addr == idaapi.BADADDR: break
+        
+        # 散点反汇编通常不谈 offset，直接给下一个地址
+        return {
+            "type": "raw_address",
+            "codes": "\n".join(lines),
+            "next_addr": hex(curr_addr) if len(lines) == limit else None,
+            "msg": "Address is not in a function, showing raw instructions."
+        }
 
 
 def xrefs_to_addr(addrs: Union[str, List[str]]) -> List[Dict]:
@@ -317,7 +332,7 @@ def xrefs_to_addr(addrs: Union[str, List[str]]) -> List[Dict]:
             continue
 
         for xref in idautils.XrefsTo(addr):
-            
+
             from_name = get_readble_name(xref.frm)
             to_name = get_readble_name(xref.to)
 
@@ -517,31 +532,29 @@ def read_string(addrs: Union[str, List[str]]) -> List[Dict]:
 
     return results
 
-def search_in_strings_window(pattern: str, offset = 0, limit = 10) -> List[Dict]:
-    """
-    在 IDA 的字符串列表中进行子串匹配
-    """
+def search_in_strings_window(pattern: str, offset=0, limit=10) -> Dict:
     global global_strings_lists
-    matches = []
-    regex = re.compile(pattern, re.IGNORECASE)
+    try:
+        regex = re.compile(pattern, re.I)
+    except:
+        return {"error": "Invalid regex"}
 
-    strings = global_strings_lists
-    skipped = 0
-    more = False
-    for ea, text in strings:
+    matches, found, more = [], 0, False
+    for ea, text in global_strings_lists:
         if regex.search(text):
-            if skipped < offset:
-                skipped += 1
-                continue
-            if len(matches) >= limit:
-                more = True
-                break
-            matches.append({"addr": hex(ea), "string": text})
+            if found >= offset:
+                if len(matches) < limit:
+                    matches.append({"addr": hex(ea), "str": text})
+                else:
+                    more = True
+                    break
+            found += 1
 
     return {
-        "n": len(matches),
-        "matches": matches,
-        "cursor": {"next": offset + limit} if more else {"done": True},
+        "results": matches,
+        "count": len(matches),
+        "next": offset + len(matches) if more else None,
+        "has_more": more
     }
 
 def get_global_value(queries: Union[str, List[str]]) -> List[Dict]:
@@ -590,7 +603,7 @@ def stack_frame(addrs: Union[str, List[str]]) -> List[Dict]:
         frame_id = idc.get_frame_id(addr)
         if frame_id == idc.BADADDR:
             continue
-            
+
         members = []
         # 使用 idautils 直接获取成员信息 (offset, name, size)
         for offset, name, size in idautils.StructMembers(frame_id):
@@ -599,7 +612,7 @@ def stack_frame(addrs: Union[str, List[str]]) -> List[Dict]:
                 "name": name,
                 "size": size
             })
-            
+
         results.append({
             "function": hex(addr),
             "frame_size": idc.get_struc_size(frame_id),
@@ -623,7 +636,7 @@ def declare_stack_variable(items: List[Dict]) -> List[Dict]:
 
         name = item.get('name')
         type_str = item.get('type', "int")
-        
+
         pfn = ida_funcs.get_func(ea)
         if not pfn: continue
 
@@ -638,7 +651,7 @@ def declare_stack_variable(items: List[Dict]) -> List[Dict]:
 
         # 定义/修改栈变量 (根据你之前的报错，使用 4 参数版本)
         success = ida_frame.define_stkvar(pfn, name, actual_offset, tif)
-            
+
         results.append({"name": name, "status": "success" if success else "failed"})
     return results
 
@@ -724,7 +737,7 @@ def read_struct_define(queries:List[str]):
     results = []
     for name in queries:
         tif = idaapi.tinfo_t()
-        
+
         # 尝试最通用的调用方式：传入本地库指针和名称字符串
         # idati 是 IDA 内置的全局变量，代表当前的 Local Types 库
         if not tif.get_named_type(idaapi.get_idati(), str(name)):
@@ -742,7 +755,7 @@ def read_struct_define(queries:List[str]):
             # 注意：在 udt_member_t 中，offset 和 size 通常是以 bit(位) 为单位的
             members.append({
                 "name": udm.name,
-                "offset": hex(udm.offset // 8), 
+                "offset": hex(udm.offset // 8),
                 "size": udm.size // 8,
                 "type": udm.type.dstr() # 关键：返回 C 风格类型字符串
             })
@@ -761,19 +774,19 @@ def search_structs(pattern_str: str, ignore_case: bool = True) -> List[Dict]:
     输入: {"f_regex": "^sock.*", "flags": 0} (flags可选, 如 re.IGNORECASE)
     """
     results = []
-    
+
     # 预先获取所有结构体列表，避免在循环中重复解析
     all_structs = list(idautils.Structs())
 
     if ignore_case:
         flags = re.IGNORECASE
     else:
-        flags = 0    
+        flags = 0
     try:
         regex = re.compile(pattern_str, flags)
     except re.error as e:
         results.append({"pattern": pattern_str, "error": str(e)})
-        return results        
+        return results
     matched = []
     for idx, sid, name in all_structs:
         if regex.search(name):
@@ -783,12 +796,12 @@ def search_structs(pattern_str: str, ignore_case: bool = True) -> List[Dict]:
                 "size": idc.get_struc_size(sid),
                 "idx": idx
             })
-            
+
     results.append({
         "pattern": pattern_str,
         "matches": matched
     })
-    
+
     return results
 
 
@@ -806,9 +819,9 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
         var_name = item.get('var_name')
         struct_type = item.get('struct_type', None)
         new_name = item.get('new_name', None)
-        
+
         success = 'Fail'
-        
+
         # 1. 获取函数
         func = ida_funcs.get_func(ea)
         if not func:
@@ -832,7 +845,7 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
         decl_str = struct_type.strip()
         if not decl_str.endswith(';'):
             decl_str += " dummy;"
-            
+
         new_type = ida_typeinf.tinfo_t()
         # PT_TYP 表示解析的是类型声明
         if ida_typeinf.parse_decl(new_type, None, decl_str, 0):
@@ -856,17 +869,17 @@ def set_lvar_type(items: List[Dict]) -> List[Dict]:
             msg = "parse c defination fail"
         if new_name:
             results.append({
-                "ea": hex(ea), 
-                "var": var_name, 
+                "ea": hex(ea),
+                "var": var_name,
                 "new_name": new_name,
-                "msg": msg, 
+                "msg": msg,
                 "status": success
             })
         else:
             results.append({
-                "ea": hex(ea), 
-                "var": var_name, 
-                "msg": msg, 
+                "ea": hex(ea),
+                "var": var_name,
+                "msg": msg,
                 "status": success
             })
 
@@ -909,11 +922,11 @@ def add_pseudocode_comment(params: List[Dict]) -> List[Dict]:
 
         # ida_hexrays.ITP_SEMI (行末注释) 或 ida_hexrays.ITP_BLOCK (块注释)
         tl = ida_hexrays.ITP_BLOCK1 if is_block else ida_hexrays.ITP_SEMI
-        
+
         loc = ida_hexrays.treeloc_t()
         loc.ea = item.ea
         loc.itp = tl
-        
+
         # 设置注释
         cfunc.set_user_cmt(loc, comment_text)
         cfunc.save_user_cmts()
@@ -932,12 +945,12 @@ def create_struct_from_c(queries: List[str], is_update: bool = False) -> List[Di
     for c_declaration in queries:
         # 1. 调用 idc.parse_decl 单步解析，它的返回值是一个元组 (name, type, fields)
         # flags = 1 代表 PT_TYP (类型解析)
-        res = idc.parse_decl(c_declaration, idc.PT_TYP) 
-        
+        res = idc.parse_decl(c_declaration, idc.PT_TYP)
+
         if not res or not res[0]:
             results.append({'name': 'unknown', "status": "IDA parse failed or anonymous struct"})
             continue
-            
+
         type_name = res[0] # 获取 IDA 解析出来的顶级结构体名称
         if not is_update:
             # 1. 检查是否作为结构体存在
@@ -960,12 +973,12 @@ def create_struct_from_c(queries: List[str], is_update: bool = False) -> List[Di
             continue
 
         sid = idc.import_type(-1, type_name)
-        
+
         if sid != idc.BADADDR:
             results.append({'name': type_name, "status": "ok"})
         else:
             results.append({'name': type_name, "status": "can't import, name invalid"})
-            
+
     return results
 
 
@@ -1024,52 +1037,45 @@ def undefine(items: List[Dict]) -> List[Dict]:
         results.append({"address": hex(addr), "success": success})
 
     return results
-    
-def find_bytes(
-    patterns: Annotated[Union[list[str], str], "Patterns (e.g. '48 8B ?? ??')"],
-    offset: Annotated[int, "Skip N matches"] = 0,
-    limit: Annotated[int, "Max matches"] = 1000,
-) -> list[dict]:
-    """
-    在 IDA 中搜索字节模式，支持通配符 ?? 和分页。
-    matches = find_bytes("48 8B ?? ??", limit=10, offset=0)
-    matches_multiple = find_bytes(["48 89", "E8 ?? ?? ?? ??"], limit=5)
 
-    """
-    if isinstance(patterns, str):
-        patterns = [patterns]
+def find_bytes(patterns: Union[list, str], offset: int = 0, limit: int = 10) -> dict:
+    """字节模式搜索，支持分页与截断告知"""
+    if isinstance(patterns, str): patterns = [patterns]
     
-    results = []
-    min_ea = idc.get_inf_attr(idc.INF_MIN_EA)
-    max_ea = idc.get_inf_attr(idc.INF_MAX_EA)
+    results, found, more = [], 0, False
+    min_ea, max_ea = idc.get_inf_attr(idc.INF_MIN_EA), idc.get_inf_attr(idc.INF_MAX_EA)
 
     for pat in patterns:
         curr_ea = min_ea
-        count = 0
-        # Calculate length by counting hex pairs (ignoring spaces/wildcards)
         pat_len = len(pat.split())
-        tokens = pat.strip().split()
-        normalized = " ".join("?" if t in ("??", "?") else t for t in tokens)  
-        
-        while len(results) < limit:
-            # find_bytes returns the EA or ida_idc.BADADDR
+        # 转换 IDA 识别的通配符格式
+        normalized = " ".join("?" if t in ("??", "?") else t for t in pat.split())
+
+        while True:
             curr_ea = ida_bytes.find_bytes(normalized, curr_ea, range_end=max_ea)
+            if curr_ea == idc.BADADDR: break
+
+            if found >= offset:
+                if len(results) < limit:
+                    val = ida_bytes.get_bytes(curr_ea, pat_len)
+                    results.append({
+                        "addr": hex(curr_ea),
+                        "hex": val.hex(' ').upper() if val else "",
+                        "asm": idc.generate_disasm_line(curr_ea, 0)
+                    })
+                else:
+                    more = True; break
             
-            if curr_ea == idc.BADADDR:
-                break
-                
-            if count >= offset:
-                val = ida_bytes.get_bytes(curr_ea, pat_len)
-                results.append({
-                    "address": hex(curr_ea),
-                    "match_value": val.hex(' ').upper() if val else "",
-                    "disasm": idc.generate_disasm_line(curr_ea, 0)
-                })
-            
-            count += 1
-            curr_ea += 1 # Advance to find next
-            
-    return results
+            found += 1
+            curr_ea += 1 # 继续向后搜索
+        if more: break
+
+    return {
+        "results": results,
+        "count": len(results),
+        "next": offset + len(results) if more else None,
+        "more": more
+    }
 
 def py_eval(code: Annotated[str, "Python code"]) -> dict:
     """Execute Python code in IDA context with accurate error line reporting."""
@@ -1215,6 +1221,7 @@ def init_globals():
     global global_imports_lists
     global global_Nams_lists
     global global_strings_lists
+    global global_func_dict
 
     for i in range(ida_funcs.get_func_qty()):
         func = ida_funcs.getn_func(i)
@@ -1223,10 +1230,12 @@ def init_globals():
         clean_name = get_readble_name(func.start_ea)
         global_func_lists.append((clean_name, func.start_ea, func))
 
+    global_func_dict = {item[0]: item for item in global_func_lists}
+
     for ea, name in idautils.Names():
         if ida_funcs.get_func(ea) is None:
             global_Nams_lists.append((ea, get_readble_name(ea)))
-    
+
     nimps = ida_nalt.get_import_module_qty()
     for i in range(0, nimps):
         module_name = ida_nalt.get_import_module_name(i)
@@ -1241,7 +1250,7 @@ def init_globals():
         global_strings_lists.append((string.ea, str(string)))
     wide_strings = get_wide_strings_manually() # default string length is 5. only support ascii wide characters
     global_strings_lists.extend(wide_strings)
-    
+
 
 class IDAFunctions:
     """
@@ -1251,11 +1260,8 @@ class IDAFunctions:
     def __init__(self):
         init_globals()
 
-    def list_funcs(self, params: List) -> Dict:
-        offset = params[0]
-        limit = params[1]
-        contain = params[2]
-        return {"functions": list_funcs(offset, limit, contain)}
+    def list_funcs(self, queries: List[Tuple[int, int, str]]) -> Dict:
+        return {"functions": list_funcs(queries)}
 
     def list_globals(self, params: List) -> Dict:
         offset = params[0]
@@ -1269,8 +1275,8 @@ class IDAFunctions:
         contain = params[2]
         return {"imports": list_imports(offset, limit, contain)}
 
-    def lookup_funcs(self, params: List) -> Dict:
-        return {"functions": lookup_funcs(params)}
+    def get_func_by_addr(self, params: List) -> Dict:
+        return {"functions": get_func_by_addr(params)}
 
     def decompile(self, params: List) -> Dict:
         addr_or_name = params[0]
@@ -1339,23 +1345,23 @@ class IDAFunctions:
 
     def undefine(self, params: List) -> Dict:
         return {"results": undefine(params)}
-    
+
     def create_struct_from_c(self, params: List) -> Dict:
         queries = params[0]
         flag = params[1]
         return {'results': create_struct_from_c(queries, flag)}
-    
+
     def add_pseudocode_comment(self, params: List[Dict]) -> Dict:
         return {'results': add_pseudocode_comment(params)}
 
     def set_lvar_type(self, params: Dict) -> Dict:
         return {'results': set_lvar_type(params)}
-    
+
     def find_bytes(self, params: Tuple[str, int, int]) -> Dict:
         patterns = params[0]
         offset = params[1]
         limit = params[2]
         return {'results': find_bytes(patterns, offset, limit)}
-    
+
     def py_eval(self, code: str) -> Dict:
         return {"result": py_eval(code)}
