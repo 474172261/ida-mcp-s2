@@ -388,18 +388,18 @@ def reload_database(session_id: str, save_changes: bool = False) -> Dict[str, An
 
 
 @mcp.tool()
-def list_funcs(session_id: str, queries: Optional[List[Any]] = None) -> Dict[str, Any]:
+def list_funcs(session_id: str, queries: Optional[List[Dict]] = None) -> Dict[str, Any]:
     """List functions in the database
 
     Args:
         session_id: The session ID
-        queries: 可选项, List of Tuple(offset,limit,regex)
+        queries: 可选项, List of {offset: int, limit: int, regex:str} dictionaries
             offset: int, 分页偏移
             limit: int, 返回结果限制. 0表示无限制
             regex: str, 正则表达式筛选函数结果
     """
     if not queries:
-        queries = [(0,0,'')]
+        queries = [{'offset':0,'limit':0,'regex':'.*'}]
     return _call_ida_method(session_id, "list_funcs", queries)
 
 

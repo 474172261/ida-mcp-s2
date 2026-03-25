@@ -92,11 +92,11 @@ def run_tests(functions: ida_functions.IDAFunctions):
     func_addr = "0x180077C14"
 
     # 1. 测试 list_funcs
-    test_function("list_funcs", functions.list_funcs, [(0, 0, "")])
+    test_function("list_funcs", functions.list_funcs, [{'offset':0,'limit':0,'regex':".*"}])
 
     # 2. 测试 list_funcs with filter
     test_function(
-        "list_funcs (with filter)", functions.list_funcs, [(0, 0, "Handle.*Completion")]
+        "list_funcs (with filter)", functions.list_funcs, [{'offset':0,'limit':0,'regex':"Handle.*Completion"}]
     )
 
     # 3. 测试 list_globals

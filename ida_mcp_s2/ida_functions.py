@@ -38,14 +38,17 @@ global_Nams_lists = []
 global_imports_lists = []
 global_strings_lists = []
 
-def list_funcs(queries: List[Tuple[int, int, str]]) -> List[Dict]:
+def list_funcs(queries: List[Dict]) -> List[Dict]:
     """列出函数 - 函数式实现 (增加 limit 截断状态)"""
     global global_func_lists
     results = []
     if not global_func_lists:
         raise ValueError("not init yet")
-
-    for offset, limit, regex in queries:
+    
+    for query in queries:
+        offset = query.get('offset', 0)
+        limit = query.get('limit', 0)
+        regex = query.get('regex', '.*')
         try:
             regex_obj = re.compile(regex or '.*', re.IGNORECASE)
         except re.error:
@@ -1272,7 +1275,7 @@ class IDAFunctions:
     def __init__(self):
         init_globals()
 
-    def list_funcs(self, queries: List[Tuple[int, int, str]]) -> Dict:
+    def list_funcs(self, queries: List[Dict]) -> Dict:
         return {"functions": list_funcs(queries)}
 
     def list_globals(self, params: List) -> Dict:

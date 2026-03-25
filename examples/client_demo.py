@@ -95,7 +95,7 @@ class IDAMCPClient:
             return False
 
     async def list_funcs(
-        self, queries: Optional[List[Tuple[int, int, str]]] = None
+        self, queries: Optional[List[Dict]] = None
     ) -> Dict:
         """列出函数"""
         if not self.session_id:
@@ -580,7 +580,7 @@ async def demo():
 
         # 4. 列出函数（带过滤）
         print_section("4. List Functions with contain 'Handle.*Completion'")
-        funcs_filtered = await client.list_funcs([(0, 0, "Handle.*Completion")])
+        funcs_filtered = await client.list_funcs([{'offset':0, 'limit':0, 'regex':"Handle.*Completion"}])
         print_result("Filtered Functions", funcs_filtered)
 
         # 5. 列出全局变量
