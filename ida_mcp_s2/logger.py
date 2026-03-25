@@ -18,12 +18,12 @@ def set_debug(debug: bool):
     _LOGGER = None
 
 
-def get_logger():
+def get_logger(name:str):
     """获取日志记录器"""
     global _LOGGER
 
     if _LOGGER is None:
-        _LOGGER = logging.getLogger("ida_mcp_s1")
+        _LOGGER = logging.getLogger(name)
         _LOGGER.setLevel(logging.DEBUG if _DEBUG else logging.INFO)
 
         # Remove existing handlers

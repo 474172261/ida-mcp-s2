@@ -37,6 +37,7 @@ def get_session_id():
     g_id_nums += 1
     return 'sid_{:04x}'.format(g_id_nums)
 
+g_parent_name = 'parent'
 
 class IDASession:
     """
@@ -48,7 +49,7 @@ class IDASession:
         global g_persist_changes
         self.session_id = session_id
         self.db_path = db_path
-        self.logger = get_logger()
+        self.logger = get_logger(g_parent_name)
         self.persist_changes = g_persist_changes
         self.parent_sock = None
         self.process = None
@@ -96,7 +97,8 @@ class IDASession:
             self._send_message(self.parent_sock, message)
         except:
             pass
-
+        
+        self.logger.info("wait child process exit")
         self.process.join(timeout=10)
 
         if self.process.is_alive():
@@ -155,7 +157,9 @@ def _ida_worker(
     IDA工作进程
     在每个进程中只能打开一个IDA数据库
     """
-    logger = get_logger()
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    logger = get_logger("child")
     logger.setLevel(log_level)
     logger.info(f"IDA worker started for database: {db_path}")
     logger.info(f"Worker PID: {os.getpid()}, Session: {session_id[:8]}")
@@ -260,7 +264,7 @@ def _call_ida_method(session_id: str, method: str, params: List) -> Any:
     if not session:
         return {"error": "Session not found"}
 
-    logger = get_logger()
+    logger = get_logger(g_parent_name)
     logger.debug("call ida function: " + method + " " + str(params))
     result = session.call(method, params)
     if result.get("success"):
@@ -303,7 +307,7 @@ def open_database(name: str) -> Dict[str, Any]:
     Args:
         name: Database file name (with or without extension)
     """
-    logger = get_logger()
+    logger = get_logger(g_parent_name)
 
     # Security: validate database name (no path traversal)
     if "/" in name or "\\" in name or ".." in name:
@@ -763,7 +767,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8080, persist_changes: bool = 
     """Run the MCP server with HTTP transport"""
     global g_persist_changes
     g_persist_changes = persist_changes
-    logger = get_logger()
+    logger = get_logger(g_parent_name)
     logger.info(f"Starting IDA MCP Server on {host}:{port}")
     logger.info(f"Database directory: {db_dir}")
     mcp.settings.host = host
@@ -775,7 +779,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8080, persist_changes: bool = 
 
 def stop_server():
     """Stop the server and close all sessions"""
-    logger = get_logger()
+    logger = get_logger(g_parent_name)
     logger.info("Stopping server...")
 
     # Close all sessions

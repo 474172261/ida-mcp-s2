@@ -15,10 +15,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from ida_mcp_s2.server import init_server, run_server, stop_server
 from ida_mcp_s2.logger import set_debug, get_logger
 
-
+g_parent_name = 'parent'
 def signal_handler(signum, frame):
     """Handle Ctrl+C signal"""
-    logger = get_logger()
+    logger = get_logger(g_parent_name)
     logger.info("Received interrupt signal, shutting down...")
     stop_server()
     sys.exit(0)
@@ -47,7 +47,7 @@ def main():
     if args.debug:
         set_debug(True)
 
-    logger = get_logger()
+    logger = get_logger(g_parent_name)
 
     # Validate database directory
     db_dir = Path(args.db_dir)

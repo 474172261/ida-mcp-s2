@@ -53,8 +53,8 @@ pip install -r requirements.txt
 > python main.py --db-dir E:\db_dir\ --port 18888 --debug
 
 Loading IDA library from: C:\Program Files\IDA Professional 9.1\idalib.dll
-2026-03-24 14:58:58 - ida_mcp_s1 - INFO - Starting IDA MCP Server on 0.0.0.0:18888
-2026-03-24 14:58:58 - ida_mcp_s1 - INFO - Database directory: E:\db_dir
+2026-03-24 14:58:58 - ida_mcp_s2 - INFO - Starting IDA MCP Server on 0.0.0.0:18888
+2026-03-24 14:58:58 - ida_mcp_s2 - INFO - Database directory: E:\db_dir
 INFO:     Started server process [3388]
 INFO:     Waiting for application startup.
 [03/24/26 14:58:59] INFO     StreamableHTTP session manager started                                                                                                             streamable_http_manager.py:116
@@ -346,22 +346,6 @@ Worker: Exit
 静默执行：在分析过程中，直接调用工具进行修改，完成后向我总结你做了哪些重构。
 任务开始：
 请读取我提供的伪代码（或指定函数名），开始你的逆向重构工作。
-```
-
-## 日志
-
-使用Python标准logging模块，模块名为 `ida_mcp_s2`：
-
-```python
-from ida_mcp_s2.logger import set_debug, get_logger
-
-# 启用调试模式
-set_debug(True)
-
-# 获取logger
-logger = get_logger()
-logger.info("Info message")
-logger.debug("Debug message")
 ```
 
 ## 故障排除
