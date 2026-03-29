@@ -64,3 +64,59 @@ def get_wide_strings_manually(min_len=5):
                 curr += 2 # UTF-16 通常是对齐的，每次移动2字节
 
     return wide_string
+
+def format_struct(obj, indent=0):
+    """
+    带 {} 和 [] 分隔的结构化格式化函数，返回字符串。
+    支持内容截断（1000字符/项）。
+    """
+    lines = []
+    space = "  " * indent
+    next_space = "  " * (indent + 1)
+    limit = 1000
+
+    # 1. 处理 字典 或 类对象
+    if isinstance(obj, dict) or hasattr(obj, "__dict__"):
+        data = obj if isinstance(obj, dict) else obj.__dict__
+        if not data:
+            return "{}"
+            
+        lines.append("{\n")
+        items = list(data.items())
+        for i, (k, v) in enumerate(items):
+            if i >= limit:
+                lines.append(f"{next_space}... (truncated)\n")
+                break
+            # 拼接 Key 并递归获取 Value 的字符串
+            val_str = format_struct(v, indent + 1)
+            comma = "," if i < len(items) - 1 else ""
+            lines.append(f"{next_space}'{k}': {val_str}{comma}\n")
+        lines.append(f"{space}}}")
+
+    # 2. 处理 列表/元组/集合
+    elif isinstance(obj, (list, tuple, set)):
+        if not obj:
+            return "[]"
+            
+        lines.append("[\n")
+        obj_list = list(obj)
+        for i, item in enumerate(obj_list):
+            if i >= limit:
+                lines.append(f"{next_space}... (truncated)\n")
+                break
+            val_str = format_struct(item, indent + 1)
+            comma = "," if i < len(obj_list) - 1 else ""
+            lines.append(f"{next_space}{val_str}{comma}\n")
+        lines.append(f"{space}]")
+
+    # 3. 处理 基础类型
+    else:
+        if isinstance(obj, str):
+            content = obj[:limit]
+            res = f"'{content}...'" if len(obj) > limit else f"'{obj}'"
+        else:
+            s_obj = str(obj)
+            res = s_obj[:limit] + "..." if len(s_obj) > limit else s_obj
+        return res
+
+    return "".join(lines)

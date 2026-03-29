@@ -21,6 +21,7 @@ import logging
 
 from mcp.server.fastmcp import FastMCP
 from ida_mcp_s2.logger import get_logger, set_debug
+from ida_mcp_s2.utils import format_struct
 
 # Initialize FastMCP server
 mcp = FastMCP("ida-mcp-s1")
@@ -268,7 +269,8 @@ def _call_ida_method(session_id: str, method: str, params: List) -> Any:
     logger.debug("call ida function: " + method + " " + str(params))
     result = session.call(method, params)
     if result.get("success"):
-        logger.debug("call ida function result: " + str(result.get("data")))
+        logger.debug("call ida function result: ")
+        logger.debug(format_struct(result.get("data")))
         return result.get("data")
     else:
         raise ValueError(result.get("error", "Unknown error"))
@@ -748,7 +750,7 @@ def find_bytes(session_id: str, patterns:Union[list[str], str], offset:int = 0, 
 
 @mcp.tool()
 def py_eval(session_id: str, code: str) -> Dict[str, Any]:
-    """Execute Python code in IDA context
+    """Execute Python code in IDA context.
 
     Args:
         session_id: The session ID

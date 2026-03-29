@@ -30,11 +30,10 @@ import ida_name
 
 # 导入要测试的模块
 from ida_mcp_s2 import ida_functions
-from ida_mcp_s2.utils import debug_stop
+from ida_mcp_s2.utils import debug_stop, format_struct
 
 # 测试统计
 test_results = {"passed": 0, "failed": 0, "errors": []}
-
 
 def test_function(func_name, func, *args, **kwargs):
     """测试单个函数"""
@@ -53,18 +52,19 @@ def test_function(func_name, func, *args, **kwargs):
         print(f"结果类型: {type(result).__name__}")
 
         # 格式化输出结果
-        if isinstance(result, (list, dict)):
-            result_str = json.dumps(result, indent=2, ensure_ascii=False)
-            if len(result_str) > 1000:
-                print(f"结果(截断): {result_str[:1000]}...")
-            else:
-                print(f"结果: {result_str}")
-        else:
-            result_str = str(result)
-            if len(result_str) > 1000:
-                print(f"结果(截断): {result_str[:1000]}...")
-            else:
-                print(f"结果: {result_str}")
+        print(format_struct(result))
+        # if isinstance(result, (list, dict)):
+        #     result_str = json.dumps(result, indent=2, ensure_ascii=False)
+        #     if len(result_str) > 1000:
+        #         print(f"结果(截断): {result_str[:1000]}...")
+        #     else:
+        #         print(f"结果: {result_str}")
+        # else:
+        #     result_str = str(result)
+        #     if len(result_str) > 1000:
+        #         print(f"结果(截断): {result_str[:1000]}...")
+        #     else:
+        #         print(f"结果: {result_str}")
     except Exception as e:
         print(e)
         print("!!!!!!!!!!!!!!!!!!!!!!!")
