@@ -30,7 +30,7 @@ import ida_lines
 import ida_segment
 import traceback
 from ida_mcp_s2.utils import get_wide_strings_manually, get_readble_name, debug_stop
-
+from ida_mcp_s2.add_struct_xrefs import add_struct_xrefs
 
 global_func_lists = []
 global_func_dict = {}
@@ -255,6 +255,7 @@ def decompile(addr: str, offset: int = 0, limit: int = 0) -> Dict:
         code_segment = full_code[offset:]
         has_more = False
 
+    add_struct_xrefs(cfunc)
     return {
         'func_name': get_readble_name(this_func.start_ea),
         'addr': hex(this_func.start_ea),
