@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Standalone add_struct_xrefs implementation extracted from referee.py.
 """
@@ -15,6 +15,8 @@ from ida_mcp_s2.logger import get_logger
 
 NETNODE_NAME = '$ referee-xrefs'
 NETNODE_TAG = 'X'
+# Set to False to disable debug logs in this module only.
+ADD_STRUCT_XREFS_DEBUG = False
 
 __all__ = ["NETNODE_NAME", "NETNODE_TAG", "add_struct_xrefs"]
 
@@ -80,7 +82,7 @@ def format_context(**kwargs):
 
 
 def log_message(level, message, **kwargs):
-    if level == 'debug': # 手动控制输出, 避免输出过多干扰信息.
+    if level == "debug" and not ADD_STRUCT_XREFS_DEBUG:
         return
     context = format_context(**kwargs)
     if context:
@@ -289,10 +291,11 @@ class StructXrefAdder(ida_hexrays.ctree_visitor_t):
                         struct_name=strname,
                         struct_id=struct_id,
                         flags=flags_to_str(flags))
-                log.debug((" 0x{:X} \t"
-                           "struct {} \t"
-                           "{}").format(
-                           ea, strname, flags_to_str(flags)))
+                log_message(
+                    "debug",
+                    (" 0x{:X} \t"
+                     "struct {} \t"
+                     "{}").format(ea, strname, flags_to_str(flags)))
             else:
                 if not ida_xref.add_dref(ea, member_id, flags):
                     log_message(
@@ -303,12 +306,14 @@ class StructXrefAdder(ida_hexrays.ctree_visitor_t):
                         member_name=member_name or get_tid_name(member_id),
                         member_id=member_id,
                         flags=flags_to_str(flags))
-                log.debug((" 0x{:X} \t"
-                           "member {}.{} \t"
-                           "{}").format(
-                               ea, strname,
-                               member_name or get_tid_name(member_id),
-                               flags_to_str(flags)))
+                log_message(
+                    "debug",
+                    (" 0x{:X} \t"
+                     "member {}.{} \t"
+                     "{}").format(
+                        ea, strname,
+                        member_name or get_tid_name(member_id),
+                        flags_to_str(flags)))
         else:
             log_message(
                 "debug",
@@ -665,3 +670,4 @@ def flags_to_str(num):
     if num:
         res += ' unknown: 0x{:X}'.format(num)
     return res
+
