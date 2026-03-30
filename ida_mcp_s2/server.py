@@ -418,7 +418,7 @@ def get_func_by_addr(session_id: str, queries: List[str]) -> Dict[str, Any]:
 
 @mcp.tool()
 def decompile(session_id: str, addr: str, offset: int = 0, limit: int = 0) -> Dict:
-    """Decompile a function
+    """Decompile a function.(同时, 自动添加函数内变量的结构体的字段的xrefs信息到数据库中.)
 
     Args:d
         session_id: The session ID
