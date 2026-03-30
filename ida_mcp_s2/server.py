@@ -67,7 +67,7 @@ class IDASession:
                 self.db_path,
                 self.persist_changes,
                 self.session_id,
-                self.logger.level,
+                self.logger.isEnabledFor(logging.DEBUG),
             ),
         )
         self.process.start()
@@ -152,7 +152,7 @@ def _ida_worker(
     db_path: str,
     persist_changes: bool,
     session_id: str,
-    log_level: bool,
+    debug_enabled: bool,
 ):
     """
     IDA工作进程
@@ -160,8 +160,8 @@ def _ida_worker(
     """
     import signal
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    set_debug(debug_enabled)
     logger = get_logger("child")
-    logger.setLevel(log_level)
     logger.info(f"IDA worker started for database: {db_path}")
     logger.info(f"Worker PID: {os.getpid()}, Session: {session_id[:8]}")
 

@@ -80,6 +80,8 @@ def format_context(**kwargs):
 
 
 def log_message(level, message, **kwargs):
+    if level == 'debug': # 手动控制输出, 避免输出过多干扰信息.
+        return
     context = format_context(**kwargs)
     if context:
         message = "{} ({})".format(message, context)

@@ -5,45 +5,49 @@
 import logging
 import sys
 
-_LOGGER = None
+_LOGGERS = {}
 _DEBUG = False
 
 
 def set_debug(debug: bool):
     """启用或禁用调试模式"""
-    global _DEBUG, _LOGGER
+    global _DEBUG, _LOGGERS
     _DEBUG = debug
 
-    # Reset logger to apply new debug setting
-    _LOGGER = None
+    # Reset loggers to apply new debug setting
+    _LOGGERS = {}
 
 
 def get_logger(name:str):
     """获取日志记录器"""
-    global _LOGGER
+    global _LOGGERS
 
-    if _LOGGER is None:
-        _LOGGER = logging.getLogger(name)
-        _LOGGER.setLevel(logging.DEBUG if _DEBUG else logging.INFO)
+    logger = _LOGGERS.get(name)
+    if logger is None:
+        logger = logging.getLogger(name)
+        _LOGGERS[name] = logger
 
-        # Remove existing handlers
-        _LOGGER.handlers = []
+    level = logging.DEBUG if _DEBUG else logging.INFO
+    logger.setLevel(level)
 
-        # Create console handler
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setLevel(logging.DEBUG if _DEBUG else logging.INFO)
+    # Remove existing handlers
+    logger.handlers = []
 
-        # Create formatter
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-        handler.setFormatter(formatter)
+    # Create console handler
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
 
-        # Add handler to logger
-        _LOGGER.addHandler(handler)
+    # Create formatter
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    handler.setFormatter(formatter)
 
-        # Prevent propagation to root logger
-        _LOGGER.propagate = False
+    # Add handler to logger
+    logger.addHandler(handler)
 
-    return _LOGGER
+    # Prevent propagation to root logger
+    logger.propagate = False
+
+    return logger
