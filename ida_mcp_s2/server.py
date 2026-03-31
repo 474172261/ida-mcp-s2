@@ -180,7 +180,7 @@ def _ida_worker(
 
         from ida_mcp_s2.ida_functions import IDAFunctions
 
-        ida_funcs = IDAFunctions()
+        ida_funcs = IDAFunctions(db_path)
 
         while True:
             try:
@@ -442,6 +442,23 @@ def disasm(session_id: str, addr: str, offset: int = 0, limit: int = 0) -> Dict:
     """
     result = _call_ida_method(session_id, "disasm", [addr, offset, limit])
     return result.get("result", "")
+
+
+@mcp.tool()
+def save_viewed_functions(session_id: str, restart_record: bool = False) -> str:
+    """Save viewed function names to a file in the current database folder."""
+    try:
+        result = _call_ida_method(
+            session_id,
+            "save_viewed_functions",
+            [restart_record],
+        )
+    except Exception:
+        return "error"
+
+    if isinstance(result, dict):
+        return result.get("result", "error")
+    return "error"
 
 
 # MCP Tools - Cross References and Call Graph

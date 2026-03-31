@@ -22,6 +22,8 @@ import ida_strlist
 import ast
 import io
 import sys
+from pathlib import Path
+from uuid import uuid4
 import ida_ida
 import ida_dbg
 import ida_entry
@@ -38,13 +40,51 @@ global_Nams_lists = []
 global_imports_lists = []
 global_strings_lists = []
 
+
+class ViewedFunctionRecorder:
+    def __init__(self, db_path: str):
+        self.db_path = Path(db_path)
+        self.decompile_funcs = set()
+        self.disasm_funcs = set()
+
+    def record(self, record_type: str, func_name: str):
+        if not func_name:
+            return
+        if record_type == "decompile":
+            self.decompile_funcs.add(func_name)
+        elif record_type == "disasm":
+            self.disasm_funcs.add(func_name)
+
+    def save(self, restart_record: bool = False) -> str:
+        file_name = f"{self.db_path.name}.viewed_functions.{uuid4().hex}.json"
+        output_path = self.db_path.parent / file_name
+        payload = {
+            "database": self.db_path.name,
+            "decompile": sorted(self.decompile_funcs),
+            "disasm": sorted(self.disasm_funcs),
+        }
+        content = json.dumps(payload, ensure_ascii=False, indent=2)
+        try:
+            output_path.write_text(content, encoding="utf-8")
+            if output_path.read_text(encoding="utf-8") != content:
+                return "error"
+        except OSError:
+            return "error"
+        if restart_record:
+            self.clear()
+        return str(output_path)
+
+    def clear(self):
+        self.decompile_funcs.clear()
+        self.disasm_funcs.clear()
+
 def list_funcs(queries: List[Dict]) -> List[Dict]:
     """列出函数 - 函数式实现 (增加 limit 截断状态)"""
     global global_func_lists
     results = []
     if not global_func_lists:
         raise ValueError("not init yet")
-    
+
     for query in queries:
         offset = query.get('offset', 0)
         limit = query.get('limit', 0)
@@ -1273,8 +1313,9 @@ class IDAFunctions:
     IDA功能包装类
     用于在工作进程中调用函数式实现
     """
-    def __init__(self):
+    def __init__(self, db_path: str):
         init_globals()
+        self.viewed_function_recorder = ViewedFunctionRecorder(db_path)
 
     def list_funcs(self, queries: List[Dict]) -> Dict:
         return {"functions": list_funcs(queries)}
@@ -1298,13 +1339,22 @@ class IDAFunctions:
         addr_or_name = params[0]
         offset = params[1]
         limit = params[2]
-        return {"result": decompile(addr_or_name, offset, limit)}
+        result = decompile(addr_or_name, offset, limit)
+        self.viewed_function_recorder.record("decompile", result.get("func_name"))
+        return {"result": result}
 
     def disasm(self, params: List) -> Dict:
         addr_or_name = params[0]
         offset = params[1]
         limit = params[2]
-        return {"result": disasm(addr_or_name, offset, limit)}
+        result = disasm(addr_or_name, offset, limit)
+        if result.get("type") == "function":
+            self.viewed_function_recorder.record("disasm", result.get("func_name"))
+        return {"result": result}
+
+    def save_viewed_functions(self, params: List) -> Dict:
+        restart_record = params[0] if params else False
+        return {"result": self.viewed_function_recorder.save(restart_record)}
 
     def xrefs_to_addr(self, addrs: List) -> Dict:
         return {"xrefs": xrefs_to_addr(addrs)}

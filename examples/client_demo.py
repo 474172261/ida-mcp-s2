@@ -161,6 +161,23 @@ class IDAMCPClient:
                 return item.text if item.text else ""
         return ""
 
+    async def save_viewed_functions(self, restart_record: bool = False) -> str:
+        """Save viewed decompile/disasm function names to a file."""
+        if not self.session_id:
+            return "Error: No active session"
+
+        content = await self._call_tool(
+            "save_viewed_functions",
+            {
+                "session_id": self.session_id,
+                "restart_record": restart_record,
+            },
+        )
+        for item in content:
+            if item.type == "text":
+                return item.text if item.text else ""
+        return ""
+
     async def xrefs_to_addr(self, addrs: List[str]) -> List[Dict]:
         """获取交叉引用"""
         if not self.session_id:
@@ -763,6 +780,10 @@ async def demo():
         py_eval_result = await client.py_eval("print(1)\nimport idapro")
         print_result("py_eval Result", py_eval_result)
 
+        print_section("33. Save Viewed Functions")
+        save_viewed_functions_result = await client.save_viewed_functions(True)
+        print_result("Save Viewed Functions Result", save_viewed_functions_result)
+
     except Exception as e:
         print(f"\nError during demo: {e}")
         import traceback
@@ -771,7 +792,7 @@ async def demo():
 
     finally:
         # 32. 关闭数据库
-        print_section("32. Close Database")
+        print_section("34. Close Database")
         await client.close_database()
 
     print_section("Demo Complete!")

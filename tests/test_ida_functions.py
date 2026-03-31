@@ -231,6 +231,11 @@ def run_tests(functions: ida_functions.IDAFunctions):
     # 打印测试总结
     print("\n" + "=" * 70)
     print("测试总结")
+    test_function(
+        "save_viewed_functions",
+        functions.save_viewed_functions,
+        [True],
+    )
     print("=" * 70)
     total = test_results["passed"] + test_results["failed"]
     print(f"总测试数: {total}")
@@ -252,7 +257,7 @@ def run_tests(functions: ida_functions.IDAFunctions):
 if __name__ == "__main__":
     # 检查是否在IDA环境中
     idapro.open_database(sys.argv[1], True)
-    functions = ida_functions.IDAFunctions()
+    functions = ida_functions.IDAFunctions(sys.argv[1])
     try:
         # 确保IDA自动分析完成
         if ida_auto.get_auto_state() == ida_auto.AU_NONE:

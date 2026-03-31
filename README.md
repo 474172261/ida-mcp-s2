@@ -198,6 +198,9 @@ GET /mcp
 #### 代码执行
 - `py_eval`: 在IDA上下文中执行Python代码
 
+#### 记录保留
+- `save_viewed_functions`: 保存查询过的函数记录(方便检查AI查询过哪些函数, 是否存在遗漏)
+
 ## http请求示例
 
 ### 1. 打开数据库
