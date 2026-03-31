@@ -206,7 +206,7 @@ def get_func_by_addr(addresses: List[str]) -> List[Dict]:
                     "func_start": hex(func.start_ea),
                     "func_end": hex(func.end_ea),
                     "name": get_readble_name(func.start_ea),
-                    'decompile size': len(str(ida_hexrays.decompile(func)))
+                    'decompile size': hex(len(str(ida_hexrays.decompile(func))))
                 })
             else:
                 results.append({
@@ -770,13 +770,13 @@ def read_struct_define(queries:List[str]):
             members.append({
                 "name": udm.name,
                 "offset": hex(udm.offset // 8),
-                "size": udm.size // 8,
+                "size": hex(udm.size // 8),
                 "type": udm.type.dstr() # 关键：返回 C 风格类型字符串
             })
 
         results.append( {
             "name": name,
-            "size": tif.get_size(),
+            "size": hex(tif.get_size()),
             "members": members
         })
     return results
@@ -807,7 +807,7 @@ def search_structs(pattern_str: str, ignore_case: bool = True) -> List[Dict]:
             matched.append({
                 "name": name,
                 "id": hex(sid),
-                "size": idc.get_struc_size(sid),
+                "size": hex(idc.get_struc_size(sid)),
                 "idx": idx
             })
 
