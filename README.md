@@ -19,6 +19,7 @@ ida-mcp-s2/
 ├── ida_mcp_s2/
 │   ├── server.py           # MCP服务实现
 │   ├── ida_functions.py    # IDA功能封装
+|   ├── add_struct_xrefs.py # referee插件封装. (因为正常的referee插件在idalib中无法被触发, 所以封装了它的实现到decompile里)
 │   └── logger.py           # 日志模块
 ├── examples/
 │   └── client_demo.py      # MCP客户端测试示例
