@@ -264,7 +264,7 @@ def get_func_by_addr(addresses: List[str]) -> List[Dict]:
 
 
 def decompile(addr: str, offset: int = 0, limit: int = 0) -> Dict:
-    """反编译函数 - 仅支持地址(int)，增加截断告知"""
+    """反编译函数 - 优化截断逻辑：优先在换行符处截断"""
     # 1. 获取函数对象
     faddr = int(addr, 0)
     this_func = ida_funcs.get_func(faddr)
@@ -287,25 +287,40 @@ def decompile(addr: str, offset: int = 0, limit: int = 0) -> Dict:
             'total_size': total_len
         }
 
-    # 4. 计算截断逻辑
+    # 4. 计算截断逻辑 (优化点)
+    has_more = False
+    end_pos = total_len
+    
     if limit > 0 and (offset + limit) < total_len:
-        code_segment = full_code[offset : offset + limit]
+        # 尝试在 limit 范围内找到最后一个换行符
+        search_range = full_code[offset : offset + limit]
+        last_newline = search_range.rfind('\n')
+        
+        if last_newline != -1:
+            # 找到了换行符，截断到换行符（包含该换行符）
+            actual_limit = last_newline + 1
+            end_pos = offset + actual_limit
+        else:
+            # 如果 limit 范围内一个换行符都没有，则强制按 limit 截断
+            end_pos = offset + limit
+            
         has_more = True
-    else:
-        code_segment = full_code[offset:]
-        has_more = False
 
+    code_segment = full_code[offset : end_pos]
+
+    # 5. 执行辅助操作并返回
     add_struct_xrefs(cfunc)
     return {
         'func_name': get_readble_name(this_func.start_ea),
         'addr': hex(this_func.start_ea),
         'code': code_segment,
         'offset': offset,
-        'limit' : limit if limit else 'all',
+        'limit': limit if limit else 'all',
         'has_more': has_more,
-        'next_offset': offset + len(code_segment) if has_more else None,
+        'next_offset': end_pos if has_more else None,
         'total_size': total_len
     }
+
 
 def disasm(addr: str, offset: int = 0, limit: int = 0) -> Dict:
     """反汇编 - 仅支持地址(int)，增加截断告知"""
