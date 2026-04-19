@@ -1165,6 +1165,7 @@ def py_eval(code: Annotated[str, "Python code"]) -> dict:
     exec_globals = {
         "__builtins__": __builtins__,
         "idaapi": idaapi,
+        "ida_idaapi": ida_idaapi,
         "idc": idc,
         "idautils": lazy_import("idautils"),
         "ida_allins": lazy_import("ida_allins"),
