@@ -24,7 +24,7 @@ from ida_mcp_s2.logger import get_logger, set_debug
 from ida_mcp_s2.utils import format_struct
 
 # Initialize FastMCP server
-mcp = FastMCP("ida-mcp-s1")
+mcp = FastMCP("ida-mcp-s2")
 
 # Global session management
 sessions: Dict[str, "IDASession"] = {}
@@ -291,15 +291,30 @@ def list_sessions() -> Dict[str, Any]:
 
 @mcp.tool()
 def list_databases() -> Dict[str, Any]:
-    """List available IDA database files"""
+    """List available IDA database files and other files"""
     databases = {}
-    for ext in [".idb", ".i64"]:
-        for db_file in db_dir.glob(f"*{ext}"):
-            databases[db_file.name] = {
-                "size": db_file.stat().st_size,
-                "modified": db_file.stat().st_mtime,
-            }
-    return {"databases": databases}
+    other_files = {}
+    
+    # 遍历目录中的所有文件
+    for file_path in db_dir.iterdir():
+        if not file_path.is_file():
+            continue
+            
+        file_info = {
+            "size": file_path.stat().st_size,
+            "modified": file_path.stat().st_mtime,
+        }
+        
+        # 判断是否为 IDA 数据库文件
+        if file_path.suffix.lower() in [".idb", ".i64"]:
+            databases[file_path.name] = file_info
+        else:
+            other_files[file_path.name] = file_info
+    
+    return {
+        "databases": databases,
+        "other_files": other_files
+    }
 
 
 @mcp.tool()
