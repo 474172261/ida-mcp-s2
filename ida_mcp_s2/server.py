@@ -10,7 +10,6 @@ import json
 import socket
 import struct
 import threading
-import time
 import uuid
 from typing import Dict, List, Optional, Any, Optional, Union, Annotated
 from pathlib import Path
@@ -19,7 +18,7 @@ import sys
 import os
 import logging
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from ida_mcp_s2.logger import get_logger, set_debug
 from ida_mcp_s2.utils import format_struct
 
@@ -40,6 +39,12 @@ def get_session_id():
 
 g_parent_name = 'parent'
 
+def _get_rpc_timeout() -> float:
+    try:
+        return max(float(os.environ.get("IDA_MCP_RPC_TIMEOUT", "300")), 1.0)
+    except ValueError:
+        return 300.0
+
 class IDASession:
     """
     IDA会话
@@ -59,6 +64,7 @@ class IDASession:
     def _start_worker(self):
         """Start the worker process"""
         self.parent_sock, self.child_sock = socket.socketpair()
+        self.parent_sock.settimeout(_get_rpc_timeout())
 
         self.process = multiprocessing.Process(
             target=_ida_worker,
@@ -78,10 +84,23 @@ class IDASession:
 
     def call(self, method: str, params: Dict) -> Dict:
         """调用IDA工作进程"""
+        if self.process is not None and not self.process.is_alive():
+            raise ConnectionError(f"IDA worker exited with code {self.process.exitcode}")
+
         request = {"method": method, "params": params}
-        self._send_message(self.parent_sock, request)
-        response_data = self._recv_message(self.parent_sock)
-        return response_data
+        try:
+            self._send_message(self.parent_sock, request)
+            response_data = self._recv_message(self.parent_sock)
+            return response_data
+        except socket.timeout as e:
+            if self.process is not None and self.process.is_alive():
+                self.process.terminate()
+                self.process.join(timeout=5)
+            try:
+                self.parent_sock.close()
+            except Exception:
+                pass
+            raise TimeoutError(f"IDA worker RPC timed out during {method}") from e
 
     def close(self, save: Optional[bool] = None):
         """关闭会话
@@ -804,11 +823,14 @@ def run_server(host: str = "0.0.0.0", port: int = 8080, persist_changes: bool = 
     logger = get_logger(g_parent_name)
     logger.info(f"Starting IDA MCP Server on {host}:{port}")
     logger.info(f"Database directory: {db_dir}")
-    mcp.settings.host = host
-    mcp.settings.port = port
-    mcp.run(transport="streamable-http")
-    while 1:
-        time.sleep(1)
+    mcp.run(
+        transport="http",
+        host=host,
+        port=port,
+        path="/mcp",
+        stateless_http=True,
+        json_response=True,
+    )
 
 
 def stop_server():

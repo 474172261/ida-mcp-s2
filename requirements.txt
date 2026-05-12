@@ -2,7 +2,6 @@
 
 # Core dependencies
 # Note: idalib is provided by IDA Pro installation and not available via pip
-mcp>=1.6.0
 fastmcp>=3.0.0
 idapro>=0.0.2
 # Optional dependencies for enhanced functionality

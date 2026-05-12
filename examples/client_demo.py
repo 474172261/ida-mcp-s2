@@ -10,7 +10,6 @@ import uuid
 from typing import Optional, List, Dict, Any, Union
 from fastmcp import Client
 import asyncio
-import mcp
 
 
 class IDAMCPClient:
